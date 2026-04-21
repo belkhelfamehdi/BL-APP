@@ -6,6 +6,7 @@ import { AdminScreen } from '@/components/bl/admin-screen';
 import { LoginScreen } from '@/components/bl/login-screen';
 import { PreparateurScreen } from '@/components/bl/preparateur-screen';
 import { ResponsableScreen } from '@/components/bl/responsable-screen';
+import { Brand, BrandFonts } from '@/constants/brand';
 import { api } from '@/services/api';
 import { User } from '@/types/app';
 
@@ -93,44 +94,47 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f6f8',
+    backgroundColor: Brand.bone,
   },
   topBar: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: Brand.ink,
     borderBottomWidth: 1,
-    borderBottomColor: '#e6e8ee',
+    borderBottomColor: Brand.inkSoft,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   roleBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#e8f5ff',
-    color: '#0b5cab',
+    backgroundColor: Brand.ember,
+    color: Brand.ink,
     borderRadius: 999,
     overflow: 'hidden',
     paddingHorizontal: 10,
     paddingVertical: 3,
     fontSize: 12,
     fontWeight: '700',
+    fontFamily: BrandFonts.body,
   },
   userText: {
     marginTop: 4,
-    color: '#1f2a37',
+    color: Brand.bone,
     fontWeight: '700',
+    fontFamily: BrandFonts.body,
   },
   logoutButton: {
     borderRadius: 10,
-    backgroundColor: '#1f2a37',
+    backgroundColor: Brand.ember,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   logoutText: {
-    color: '#ffffff',
+    color: Brand.ink,
     fontWeight: '700',
     fontSize: 12,
+    fontFamily: BrandFonts.body,
   },
   body: {
     flex: 1,

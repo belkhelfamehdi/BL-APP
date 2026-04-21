@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
+import { Brand, BrandFonts } from '@/constants/brand';
 import { AdminReportDetail, AdminReportSummary } from '@/types/app';
 
 interface Props {
@@ -209,7 +210,7 @@ export function AdminScreen({ token, fullName }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#f5f6f8',
+    backgroundColor: Brand.bone,
   },
   container: {
     padding: 14,
@@ -218,64 +219,74 @@ const styles = StyleSheet.create({
   },
   headerCard: {
     borderRadius: 14,
-    backgroundColor: '#111827',
+    backgroundColor: Brand.ink,
     padding: 14,
+    borderWidth: 1,
+    borderColor: Brand.inkSoft,
   },
   headerTitle: {
-    color: '#ffffff',
+    color: Brand.bone,
     fontWeight: '800',
     fontSize: 20,
+    fontFamily: BrandFonts.title,
+    letterSpacing: 0.4,
   },
   headerSub: {
-    color: '#cbd5e1',
+    color: Brand.emberGlow,
     marginTop: 3,
+    fontFamily: BrandFonts.body,
   },
   sectionCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
+    borderColor: Brand.border,
+    backgroundColor: Brand.card,
     padding: 12,
     gap: 8,
   },
   sectionTitle: {
-    color: '#111827',
+    color: Brand.ink,
     fontWeight: '800',
     fontSize: 15,
+    fontFamily: BrandFonts.title,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: Brand.border,
     borderRadius: 10,
-    backgroundColor: '#ffffff',
-    color: '#111827',
+    backgroundColor: '#fffaf6',
+    color: Brand.ink,
     paddingHorizontal: 10,
     paddingVertical: 9,
+    fontFamily: BrandFonts.body,
   },
   primaryButton: {
     borderRadius: 10,
-    backgroundColor: '#2563eb',
+    backgroundColor: Brand.ember,
     alignItems: 'center',
     paddingVertical: 11,
   },
   primaryText: {
-    color: '#ffffff',
+    color: Brand.ink,
     fontWeight: '800',
+    fontFamily: BrandFonts.body,
   },
   errorText: {
-    color: '#b91c1c',
+    color: Brand.danger,
     fontWeight: '700',
     paddingHorizontal: 2,
+    fontFamily: BrandFonts.body,
   },
   emptyText: {
-    color: '#6b7280',
+    color: Brand.muted,
     paddingHorizontal: 2,
+    fontFamily: BrandFonts.body,
   },
   reportCard: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
+    borderColor: Brand.border,
+    backgroundColor: Brand.card,
     padding: 10,
     gap: 5,
   },
@@ -285,16 +296,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   reportTitle: {
-    color: '#111827',
+    color: Brand.ink,
     fontWeight: '800',
+    fontFamily: BrandFonts.body,
   },
   reportTime: {
-    color: '#6b7280',
+    color: Brand.muted,
     fontSize: 12,
+    fontFamily: BrandFonts.body,
   },
   reportSub: {
-    color: '#334155',
+    color: Brand.inkSoft,
     fontSize: 12,
+    fontFamily: BrandFonts.body,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -309,50 +323,53 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     fontSize: 12,
     fontWeight: '700',
+    fontFamily: BrandFonts.body,
   },
   summaryBadgeOk: {
-    borderColor: '#a7f3d0',
-    backgroundColor: '#ecfdf5',
-    color: '#047857',
+    borderColor: '#b7ebc8',
+    backgroundColor: '#eef8f2',
+    color: Brand.success,
   },
   summaryBadgePartial: {
-    borderColor: '#fcd34d',
-    backgroundColor: '#fffbeb',
-    color: '#b45309',
+    borderColor: Brand.emberGlow,
+    backgroundColor: '#fff6ef',
+    color: Brand.emberDark,
   },
   summaryBadgeMissing: {
-    borderColor: '#fecaca',
-    backgroundColor: '#fef2f2',
-    color: '#b91c1c',
+    borderColor: '#f5b4aa',
+    backgroundColor: '#fff1ef',
+    color: Brand.danger,
   },
   summaryBadgeNeutral: {
-    borderColor: '#dbeafe',
-    backgroundColor: '#eff6ff',
-    color: '#1e40af',
+    borderColor: Brand.border,
+    backgroundColor: '#f7efe8',
+    color: Brand.inkSoft,
   },
   modalBg: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    backgroundColor: 'rgba(8, 6, 5, 0.6)',
     justifyContent: 'center',
     padding: 14,
   },
   modalCard: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#dbe1ea',
-    backgroundColor: '#ffffff',
+    borderColor: Brand.border,
+    backgroundColor: Brand.card,
     maxHeight: '86%',
     padding: 14,
     gap: 8,
   },
   modalTitle: {
-    color: '#111827',
+    color: Brand.ink,
     fontWeight: '800',
     fontSize: 16,
+    fontFamily: BrandFonts.title,
   },
   modalSub: {
-    color: '#475569',
+    color: Brand.muted,
     fontSize: 12,
+    fontFamily: BrandFonts.body,
   },
   tableWrap: {
     maxHeight: 320,
@@ -361,49 +378,51 @@ const styles = StyleSheet.create({
   tableHeaderRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderColor: '#dbe1ea',
+    borderColor: Brand.border,
     paddingBottom: 6,
   },
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderColor: '#eef2f7',
+    borderColor: '#f0e6dd',
     paddingVertical: 6,
   },
   tableRowOk: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: '#eef8f2',
   },
   tableRowPartial: {
-    backgroundColor: '#fffbeb',
+    backgroundColor: '#fff6ef',
   },
   tableRowMissing: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: '#fff1ef',
   },
   tableHeaderCell: {
     flex: 1,
-    color: '#0f172a',
+    color: Brand.ink,
     fontWeight: '800',
     fontSize: 12,
+    fontFamily: BrandFonts.body,
   },
   tableCell: {
     flex: 1,
-    color: '#334155',
+    color: Brand.inkSoft,
     fontSize: 12,
+    fontFamily: BrandFonts.body,
   },
   statusTextOk: {
-    color: '#047857',
+    color: Brand.success,
     fontWeight: '700',
   },
   statusTextPartial: {
-    color: '#b45309',
+    color: Brand.emberDark,
     fontWeight: '700',
   },
   statusTextMissing: {
-    color: '#b91c1c',
+    color: Brand.danger,
     fontWeight: '700',
   },
   missingQtyText: {
-    color: '#b91c1c',
+    color: Brand.danger,
     fontWeight: '700',
   },
   colRef: {
@@ -411,13 +430,14 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     borderRadius: 10,
-    backgroundColor: '#2563eb',
+    backgroundColor: Brand.ember,
     alignItems: 'center',
     paddingVertical: 10,
     marginTop: 4,
   },
   closeText: {
-    color: '#ffffff',
+    color: Brand.ink,
     fontWeight: '800',
+    fontFamily: BrandFonts.body,
   },
 });

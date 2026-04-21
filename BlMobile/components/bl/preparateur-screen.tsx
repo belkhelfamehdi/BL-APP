@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
+import { Brand, BrandFonts } from '@/constants/brand';
 import { PreparationItemPayload, ProductStatus, SelectionRow } from '@/types/app';
 import { ProductLine, mapProducts } from '@/utils/products';
 
@@ -416,7 +417,7 @@ const styles = StyleSheet.create({
   },
   safe: {
     flex: 1,
-    backgroundColor: '#f5f6f8',
+    backgroundColor: Brand.bone,
   },
   container: {
     padding: 14,
@@ -425,68 +426,80 @@ const styles = StyleSheet.create({
   },
   headerCard: {
     borderRadius: 14,
-    backgroundColor: '#111827',
+    backgroundColor: Brand.ink,
     padding: 14,
+    borderWidth: 1,
+    borderColor: Brand.inkSoft,
   },
   headerTitle: {
-    color: '#ffffff',
+    color: Brand.bone,
     fontWeight: '800',
     fontSize: 20,
+    fontFamily: BrandFonts.title,
+    letterSpacing: 0.4,
   },
   headerSub: {
-    color: '#cbd5e1',
+    color: Brand.emberGlow,
     marginTop: 3,
+    fontFamily: BrandFonts.body,
   },
   sectionCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
+    borderColor: Brand.border,
+    backgroundColor: Brand.card,
     padding: 12,
     gap: 8,
   },
   sectionTitle: {
-    color: '#111827',
+    color: Brand.ink,
     fontWeight: '800',
     fontSize: 15,
+    fontFamily: BrandFonts.title,
   },
   label: {
-    color: '#1f2937',
+    color: Brand.inkSoft,
     fontWeight: '700',
+    fontFamily: BrandFonts.body,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: Brand.border,
     borderRadius: 10,
-    backgroundColor: '#ffffff',
-    color: '#111827',
+    backgroundColor: '#fffaf6',
+    color: Brand.ink,
     paddingHorizontal: 10,
     paddingVertical: 9,
+    fontFamily: BrandFonts.body,
   },
   secondaryButton: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
-    backgroundColor: '#eff6ff',
+    borderColor: Brand.emberGlow,
+    backgroundColor: '#fff3ea',
     paddingVertical: 10,
     alignItems: 'center',
   },
   secondaryText: {
-    color: '#1d4ed8',
+    color: Brand.emberDark,
     fontWeight: '700',
+    fontFamily: BrandFonts.body,
   },
   errorText: {
-    color: '#b91c1c',
+    color: Brand.danger,
     fontWeight: '700',
     paddingHorizontal: 2,
+    fontFamily: BrandFonts.body,
   },
   successText: {
-    color: '#166534',
+    color: Brand.success,
     fontWeight: '700',
     paddingHorizontal: 2,
+    fontFamily: BrandFonts.body,
   },
   emptyText: {
-    color: '#6b7280',
+    color: Brand.muted,
+    fontFamily: BrandFonts.body,
   },
   blListWrap: {
     maxHeight: 210,
@@ -498,29 +511,32 @@ const styles = StyleSheet.create({
   blRow: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#dbeafe',
-    backgroundColor: '#eff6ff',
+    borderColor: Brand.emberGlow,
+    backgroundColor: '#fff3ea',
     padding: 10,
     gap: 2,
   },
   blRowActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
+    backgroundColor: Brand.ember,
+    borderColor: Brand.emberDark,
   },
   blTitle: {
-    color: '#1e3a8a',
+    color: Brand.ink,
     fontWeight: '800',
+    fontFamily: BrandFonts.body,
   },
   blSub: {
-    color: '#1d4ed8',
+    color: Brand.emberDark,
     fontSize: 12,
+    fontFamily: BrandFonts.body,
   },
   blMeta: {
-    color: '#334155',
+    color: Brand.inkSoft,
     fontSize: 12,
+    fontFamily: BrandFonts.body,
   },
   blTextActive: {
-    color: '#ffffff',
+    color: Brand.ink,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -528,23 +544,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statsText: {
-    color: '#2563eb',
+    color: Brand.emberDark,
     fontWeight: '700',
+    fontFamily: BrandFonts.body,
   },
   activeBlCard: {
     borderWidth: 1,
-    borderColor: '#bfdbfe',
-    backgroundColor: '#f0f9ff',
+    borderColor: Brand.emberGlow,
+    backgroundColor: '#fff3ea',
     borderRadius: 10,
     padding: 10,
   },
   activeBlTitle: {
-    color: '#0c4a6e',
+    color: Brand.ink,
     fontWeight: '800',
+    fontFamily: BrandFonts.body,
   },
   activeBlSub: {
-    color: '#0369a1',
+    color: Brand.emberDark,
     marginTop: 2,
+    fontFamily: BrandFonts.body,
   },
   statsBadgesWrap: {
     flexDirection: 'row',
@@ -560,19 +579,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statsBadgeOk: {
-    borderColor: '#a7f3d0',
-    backgroundColor: '#ecfdf5',
-    color: '#047857',
+    borderColor: '#b7ebc8',
+    backgroundColor: '#eef8f2',
+    color: Brand.success,
   },
   statsBadgePartial: {
-    borderColor: '#fde68a',
-    backgroundColor: '#fffbeb',
-    color: '#b45309',
+    borderColor: Brand.emberGlow,
+    backgroundColor: '#fff6ef',
+    color: Brand.emberDark,
   },
   statsBadgeMissing: {
-    borderColor: '#fecaca',
-    backgroundColor: '#fef2f2',
-    color: '#b91c1c',
+    borderColor: '#f5b4aa',
+    backgroundColor: '#fff1ef',
+    color: Brand.danger,
   },
   productsWrap: {
     maxHeight: 420,
@@ -583,19 +602,21 @@ const styles = StyleSheet.create({
   },
   productCard: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: Brand.border,
     borderRadius: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: Brand.card,
     padding: 10,
     gap: 7,
   },
   productTitle: {
-    color: '#111827',
+    color: Brand.ink,
     fontWeight: '800',
+    fontFamily: BrandFonts.body,
   },
   productMeta: {
-    color: '#6b7280',
+    color: Brand.muted,
     fontSize: 12,
+    fontFamily: BrandFonts.body,
   },
   statusRow: {
     flexDirection: 'row',
@@ -604,35 +625,37 @@ const styles = StyleSheet.create({
   },
   statusButton: {
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: Brand.border,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   statusButtonActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
+    backgroundColor: Brand.ember,
+    borderColor: Brand.emberDark,
   },
   statusText: {
-    color: '#334155',
+    color: Brand.inkSoft,
     fontSize: 12,
     fontWeight: '700',
+    fontFamily: BrandFonts.body,
   },
   statusTextActive: {
-    color: '#ffffff',
+    color: Brand.ink,
   },
   inputSmall: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: Brand.border,
     borderRadius: 10,
-    backgroundColor: '#ffffff',
-    color: '#111827',
+    backgroundColor: '#fffaf6',
+    color: Brand.ink,
     paddingHorizontal: 10,
     paddingVertical: 8,
+    fontFamily: BrandFonts.body,
   },
   inputDisabled: {
-    backgroundColor: '#f8fafc',
-    color: '#94a3b8',
+    backgroundColor: '#f3ebe4',
+    color: '#9b8d82',
   },
   inputNote: {
     minHeight: 42,
@@ -640,13 +663,14 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     borderRadius: 10,
-    backgroundColor: '#2563eb',
+    backgroundColor: Brand.ember,
     alignItems: 'center',
     paddingVertical: 11,
   },
   primaryText: {
-    color: '#ffffff',
+    color: Brand.ink,
     fontWeight: '800',
+    fontFamily: BrandFonts.body,
   },
   disabled: {
     opacity: 0.45,
