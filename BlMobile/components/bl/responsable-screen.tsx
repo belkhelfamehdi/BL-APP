@@ -1,6 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -35,12 +37,27 @@ export function ResponsableScreen({ token, fullName }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const existingSelectedIds = useMemo(
+    () => existingSelections.map((row) => row.bl_id).sort((a, b) => a - b),
+    [existingSelections]
+  );
+
+  const existingSelectedIdsSet = useMemo(() => new Set(existingSelectedIds), [existingSelectedIds]);
+
   const selectedIds = useMemo(
-    () => Object.entries(selectedMap).filter(([, selected]) => selected).map(([id]) => Number(id)),
+    () => Object.entries(selectedMap).filter(([, selected]) => selected).map(([id]) => Number(id)).sort((a, b) => a - b),
     [selectedMap]
   );
 
   const selectedCount = selectedIds.length;
+
+  const hasPendingChanges = useMemo(() => {
+    if (selectedIds.length !== existingSelectedIds.length) {
+      return true;
+    }
+    const existingSet = new Set(existingSelectedIds);
+    return selectedIds.some((id) => !existingSet.has(id));
+  }, [existingSelectedIds, selectedIds]);
 
   const loadArticles = useCallback(async () => {
     try {
@@ -62,16 +79,30 @@ export function ResponsableScreen({ token, fullName }: Props) {
       setError(null);
       const res = await api.listSelections(token, targetDate);
       setExistingSelections(res.data);
+      const nextSelected: Record<number, boolean> = {};
+      for (const row of res.data) {
+        nextSelected[row.bl_id] = true;
+      }
+      setSelectedMap(nextSelected);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur chargement selection');
       setExistingSelections([]);
+      setSelectedMap({});
     } finally {
       setLoadingSelection(false);
     }
   }, [targetDate, token]);
 
+  useEffect(() => {
+    void loadArticles();
+  }, [loadArticles]);
+
+  useEffect(() => {
+    void loadSelections();
+  }, [loadSelections]);
+
   const saveSelection = async () => {
-    if (selectedCount === 0 || saving) {
+    if (!hasPendingChanges || saving) {
       return;
     }
 
@@ -80,7 +111,11 @@ export function ResponsableScreen({ token, fullName }: Props) {
       setError(null);
       setSuccess(null);
       await api.createSelections(token, targetDate, selectedIds);
-      setSuccess(`${selectedCount} BL enregistres pour ${targetDate}`);
+      if (selectedCount === 0) {
+        setSuccess(`Selection vide enregistree pour ${targetDate}`);
+      } else {
+        setSuccess(`${selectedCount} BL enregistres pour ${targetDate}`);
+      }
       await loadSelections();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur enregistrement selection');
@@ -91,7 +126,11 @@ export function ResponsableScreen({ token, fullName }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag">
         <View style={styles.headerCard}>
           <Text style={styles.headerTitle}>Preparation du lendemain</Text>
           <Text style={styles.headerSub}>Responsable: {fullName}</Text>
@@ -126,7 +165,7 @@ export function ResponsableScreen({ token, fullName }: Props) {
           <Text style={styles.sectionTitle}>2. Selectionner les BL</Text>
           {loadingArticles ? <ActivityIndicator color="#2563eb" /> : null}
           {!loadingArticles && articles.length === 0 ? (
-            <Text style={styles.emptyText}>Aucun BL charge. Clique sur "Charger les BL".</Text>
+            <Text style={styles.emptyText}>Aucun BL charge. Clique sur le bouton Charger les BL.</Text>
           ) : null}
 
           <ScrollView
@@ -134,26 +173,45 @@ export function ResponsableScreen({ token, fullName }: Props) {
             contentContainerStyle={styles.listContent}
             nestedScrollEnabled
             showsVerticalScrollIndicator>
-            {articles.map((item) => (
-              <Pressable
-                key={item.IDBL}
-                style={[styles.itemRow, selectedMap[item.IDBL] && styles.itemRowActive]}
-                onPress={() =>
-                  setSelectedMap((prev) => ({
-                    ...prev,
-                    [item.IDBL]: !prev[item.IDBL],
-                  }))
-                }>
-                <View style={[styles.checkbox, selectedMap[item.IDBL] && styles.checkboxOn]}>
-                  <Text style={styles.checkboxText}>{selectedMap[item.IDBL] ? 'X' : ''}</Text>
-                </View>
-                <View style={styles.itemContent}>
-                  <Text style={styles.itemTitle}>{item.Destinataire || 'Destinataire inconnu'}</Text>
-                  <Text style={styles.itemSub}>BL #{item.IDBL}</Text>
-                  <Text style={styles.itemMeta}>Date BL: {String(item.DateBL)}</Text>
-                </View>
-              </Pressable>
-            ))}
+            {articles.map((item) => {
+              const isAlreadySelected = existingSelectedIdsSet.has(item.IDBL);
+              const isSelected = Boolean(selectedMap[item.IDBL]);
+              const isPendingAdd = !isAlreadySelected && isSelected;
+              const isPendingRemove = isAlreadySelected && !isSelected;
+
+              return (
+                <Pressable
+                  key={item.IDBL}
+                  style={[
+                    styles.itemRow,
+                    isAlreadySelected && isSelected && styles.itemRowSaved,
+                    isPendingAdd && styles.itemRowPendingAdd,
+                    isPendingRemove && styles.itemRowPendingRemove,
+                  ]}
+                  onPress={() =>
+                    setSelectedMap((prev) => ({
+                      ...prev,
+                      [item.IDBL]: !prev[item.IDBL],
+                    }))
+                  }>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      isSelected && styles.checkboxOn,
+                    ]}>
+                    <Text style={styles.checkboxText}>{isSelected ? 'X' : ''}</Text>
+                  </View>
+                  <View style={styles.itemContent}>
+                    <Text style={styles.itemTitle}>{item.Destinataire || 'Destinataire inconnu'}</Text>
+                    <Text style={styles.itemSub}>BL #{item.IDBL}</Text>
+                    <Text style={styles.itemMeta}>Date BL: {String(item.DateBL)}</Text>
+                    {isAlreadySelected && isSelected ? <Text style={styles.itemSavedText}>Deja enregistre</Text> : null}
+                    {isPendingAdd ? <Text style={styles.itemAddedText}>Nouveau BL a enregistrer</Text> : null}
+                    {isPendingRemove ? <Text style={styles.itemRemovedText}>Sera retire a l enregistrement</Text> : null}
+                  </View>
+                </Pressable>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -161,11 +219,13 @@ export function ResponsableScreen({ token, fullName }: Props) {
           <View>
             <Text style={styles.summaryTitle}>BL selectionnes</Text>
             <Text style={styles.summaryCount}>{selectedCount}</Text>
+            <Text style={styles.summarySub}>Enregistres actuellement: {existingSelections.length}</Text>
+            <Text style={styles.summaryHint}>{hasPendingChanges ? 'Modifications non enregistrees' : 'Aucune modification'}</Text>
           </View>
           <Pressable
-            style={[styles.primaryButton, (selectedCount === 0 || saving) && styles.disabled]}
+            style={[styles.primaryButton, (!hasPendingChanges || saving) && styles.disabled]}
             onPress={saveSelection}>
-            {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryText}>Enregistrer</Text>}
+            {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryText}>Mettre a jour</Text>}
           </Pressable>
         </View>
 
@@ -185,11 +245,15 @@ export function ResponsableScreen({ token, fullName }: Props) {
           ))}
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   safe: {
     flex: 1,
     backgroundColor: '#f5f6f8',
@@ -197,7 +261,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 14,
     gap: 12,
-    paddingBottom: 22,
+    paddingBottom: 120,
   },
   headerCard: {
     borderRadius: 14,
@@ -283,9 +347,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     padding: 10,
   },
-  itemRowActive: {
+  itemRowSaved: {
+    borderColor: '#bbf7d0',
+    backgroundColor: '#f0fdf4',
+  },
+  itemRowPendingAdd: {
     borderColor: '#93c5fd',
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#eff6ff',
+  },
+  itemRowPendingRemove: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
   },
   checkbox: {
     width: 24,
@@ -304,6 +376,7 @@ const styles = StyleSheet.create({
   checkboxText: {
     color: '#ffffff',
     fontWeight: '800',
+    fontSize: 10,
   },
   itemContent: {
     flex: 1,
@@ -320,6 +393,24 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 12,
     marginTop: 2,
+  },
+  itemSavedText: {
+    color: '#15803d',
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '700',
+  },
+  itemAddedText: {
+    color: '#1d4ed8',
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '700',
+  },
+  itemRemovedText: {
+    color: '#b91c1c',
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '700',
   },
   summaryCard: {
     borderRadius: 12,
@@ -340,6 +431,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 24,
     marginTop: 2,
+  },
+  summarySub: {
+    color: '#64748b',
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  summaryHint: {
+    color: '#334155',
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '700',
   },
   primaryButton: {
     borderRadius: 10,

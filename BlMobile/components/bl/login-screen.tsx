@@ -51,7 +51,7 @@ export function LoginScreen({ loading, error, onLogin }: Props) {
         <View style={styles.formCard}>
           <Text style={styles.sectionTitle}>Connexion</Text>
 
-          <Text style={styles.label}>Nom d'utilisateur</Text>
+          <Text style={styles.label}>Nom utilisateur</Text>
           <TextInput
             style={styles.input}
             value={username}

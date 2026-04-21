@@ -77,7 +77,7 @@ class LoginResponse(BaseModel):
 
 class BLSelectionRequest(BaseModel):
     target_date: date | None = None
-    bl_ids: list[int] = Field(min_length=1)
+    bl_ids: list[int] = Field(default_factory=list)
 
     @field_validator("bl_ids")
     @classmethod
@@ -233,6 +233,24 @@ def init_local_db() -> None:
                 note TEXT,
                 FOREIGN KEY (report_id) REFERENCES preparation_reports(id)
             )
+            """
+        )
+
+        # Migration de securite: elimine les doublons historiques puis impose l'unicite.
+        cur.execute(
+            """
+            DELETE FROM bl_selections
+            WHERE id NOT IN (
+                SELECT MAX(id)
+                FROM bl_selections
+                GROUP BY target_date, bl_id
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_bl_selections_target_date_bl_id
+            ON bl_selections(target_date, bl_id)
             """
         )
 
@@ -666,10 +684,20 @@ def create_selections(
 
     target = payload.target_date or (date.today() + timedelta(days=1))
     now = datetime.now(timezone.utc).isoformat()
+    selected_ids = sorted(int(bl_id) for bl_id in payload.bl_ids)
 
     conn = get_sqlite_conn()
     try:
-        for bl_id in payload.bl_ids:
+        if selected_ids:
+            placeholders = ",".join("?" for _ in selected_ids)
+            conn.execute(
+                f"DELETE FROM bl_selections WHERE target_date = ? AND bl_id NOT IN ({placeholders})",
+                (target.isoformat(), *selected_ids),
+            )
+        else:
+            conn.execute("DELETE FROM bl_selections WHERE target_date = ?", (target.isoformat(),))
+
+        for bl_id in selected_ids:
             conn.execute(
                 """
                 INSERT INTO bl_selections (target_date, bl_id, selected_by, created_at)
@@ -681,9 +709,9 @@ def create_selections(
             )
         conn.commit()
 
-        headers = fetch_bl_headers_by_ids(payload.bl_ids)
+        headers = fetch_bl_headers_by_ids(selected_ids)
         items = []
-        for bl_id in payload.bl_ids:
+        for bl_id in selected_ids:
             info = headers.get(bl_id, {})
             items.append(
                 {
@@ -717,11 +745,17 @@ def list_selections(
             """
             SELECT s.target_date, s.bl_id, s.created_at, u.username AS selector_username, u.full_name AS selector_name
             FROM bl_selections s
+            INNER JOIN (
+                SELECT target_date, bl_id, MAX(id) AS latest_id
+                FROM bl_selections
+                WHERE target_date = ?
+                GROUP BY target_date, bl_id
+            ) dedup ON dedup.latest_id = s.id
             INNER JOIN users u ON u.id = s.selected_by
             WHERE s.target_date = ?
             ORDER BY s.bl_id ASC
             """,
-            (target.isoformat(),),
+            (target.isoformat(), target.isoformat()),
         ).fetchall()
 
         bl_ids = [int(row["bl_id"]) for row in rows]

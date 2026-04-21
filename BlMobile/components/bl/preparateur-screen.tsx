@@ -1,7 +1,9 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -38,6 +40,23 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function dedupeSelectionRows(rows: SelectionRow[]): SelectionRow[] {
+  const byBl = new Map<number, SelectionRow>();
+  for (const row of rows) {
+    const current = byBl.get(row.bl_id);
+    if (!current) {
+      byBl.set(row.bl_id, row);
+      continue;
+    }
+    const currentTime = new Date(current.selected_at).getTime();
+    const candidateTime = new Date(row.selected_at).getTime();
+    if (candidateTime >= currentTime) {
+      byBl.set(row.bl_id, row);
+    }
+  }
+  return [...byBl.values()].sort((a, b) => a.bl_id - b.bl_id);
+}
+
 export function PreparateurScreen({ token, fullName }: Props) {
   const [targetDate, setTargetDate] = useState(todayIso());
   const [selectionRows, setSelectionRows] = useState<SelectionRow[]>([]);
@@ -51,6 +70,11 @@ export function PreparateurScreen({ token, fullName }: Props) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const activeRow = useMemo(
+    () => selectionRows.find((row) => row.bl_id === activeBlId) ?? null,
+    [activeBlId, selectionRows]
+  );
 
   const stats = useMemo(() => {
     const rows = Object.values(drafts);
@@ -68,7 +92,7 @@ export function PreparateurScreen({ token, fullName }: Props) {
       setError(null);
       setSuccess(null);
       const res = await api.listPreparationBls(token, targetDate);
-      setSelectionRows(res.data);
+      setSelectionRows(dedupeSelectionRows(res.data));
       setActiveBlId(null);
       setProducts([]);
       setDrafts({});
@@ -79,6 +103,10 @@ export function PreparateurScreen({ token, fullName }: Props) {
       setLoadingSelection(false);
     }
   }, [targetDate, token]);
+
+  useEffect(() => {
+    void loadSelection();
+  }, [loadSelection]);
 
   const openBl = useCallback(async (blId: number) => {
     try {
@@ -100,6 +128,7 @@ export function PreparateurScreen({ token, fullName }: Props) {
       setActiveBlId(blId);
       setProducts(lines);
       setDrafts(nextDraft);
+      setGlobalComment('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur chargement produits');
       setActiveBlId(null);
@@ -196,16 +225,22 @@ export function PreparateurScreen({ token, fullName }: Props) {
     }));
 
     try {
+      const currentBlId = activeBlId;
       setSending(true);
       setError(null);
       setSuccess(null);
       await api.sendPreparationReport(token, {
         report_date: targetDate,
-        bl_id: activeBlId,
+        bl_id: currentBlId,
         overall_comment: globalComment,
         items: payload,
       });
-      setSuccess(`Rapport envoye pour BL #${activeBlId}`);
+      setSuccess(`Rapport envoye pour BL #${currentBlId}`);
+      setSelectionRows((prev) => prev.filter((row) => row.bl_id !== currentBlId));
+      setActiveBlId(null);
+      setProducts([]);
+      setDrafts({});
+      setGlobalComment('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur envoi rapport');
     } finally {
@@ -215,7 +250,11 @@ export function PreparateurScreen({ token, fullName }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag">
         <View style={styles.headerCard}>
           <Text style={styles.headerTitle}>Preparation des commandes</Text>
           <Text style={styles.headerSub}>Preparateur: {fullName}</Text>
@@ -245,17 +284,24 @@ export function PreparateurScreen({ token, fullName }: Props) {
           {loadingSelection ? <ActivityIndicator color="#2563eb" /> : null}
           {selectionRows.length === 0 ? <Text style={styles.emptyText}>Aucun BL charge.</Text> : null}
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsWrap}>
+          <ScrollView
+            style={styles.blListWrap}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            contentContainerStyle={styles.blListContent}>
             {selectionRows.map((row) => (
               <Pressable
                 key={`${row.bl_id}-${row.selected_at}`}
-                style={[styles.chip, activeBlId === row.bl_id && styles.chipActive]}
+                style={[styles.blRow, activeBlId === row.bl_id && styles.blRowActive]}
                 onPress={() => openBl(row.bl_id)}>
-                <Text style={[styles.chipText, activeBlId === row.bl_id && styles.chipTextActive]}>
+                <Text style={[styles.blTitle, activeBlId === row.bl_id && styles.blTextActive]}>
                   {row.destinataire || 'N/A'}
                 </Text>
-                <Text style={[styles.chipSub, activeBlId === row.bl_id && styles.chipTextActive]}>
+                <Text style={[styles.blSub, activeBlId === row.bl_id && styles.blTextActive]}>
                   BL #{row.bl_id}
+                </Text>
+                <Text style={[styles.blMeta, activeBlId === row.bl_id && styles.blTextActive]}>
+                  Selectionne par: {row.selector_name}
                 </Text>
               </Pressable>
             ))}
@@ -265,9 +311,22 @@ export function PreparateurScreen({ token, fullName }: Props) {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>3. Controler les produits</Text>
-            <Text style={styles.statsText}>
-              {stats.available}/{stats.total} OK
-            </Text>
+            <Text style={styles.statsText}>{stats.total} refs</Text>
+          </View>
+
+          {activeRow ? (
+            <View style={styles.activeBlCard}>
+              <Text style={styles.activeBlTitle}>{activeRow.destinataire || 'N/A'}</Text>
+              <Text style={styles.activeBlSub}>BL #{activeRow.bl_id}</Text>
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>Choisissez un BL pour afficher ses produits.</Text>
+          )}
+
+          <View style={styles.statsBadgesWrap}>
+            <Text style={[styles.statsBadge, styles.statsBadgeOk]}>OK {stats.available}</Text>
+            <Text style={[styles.statsBadge, styles.statsBadgePartial]}>Partiel {stats.partial}</Text>
+            <Text style={[styles.statsBadge, styles.statsBadgeMissing]}>Rupture {stats.missing}</Text>
           </View>
 
           {loadingProducts ? <ActivityIndicator color="#2563eb" /> : null}
@@ -305,20 +364,22 @@ export function PreparateurScreen({ token, fullName }: Props) {
                   </View>
 
                   <TextInput
-                    style={styles.inputSmall}
+                    style={[styles.inputSmall, draft.status !== 'partial' && styles.inputDisabled]}
                     value={draft.quantityPrepared !== undefined ? String(draft.quantityPrepared) : ''}
                     onChangeText={(value) => setPreparedQty(item.reference, value)}
+                    editable={draft.status === 'partial'}
                     keyboardType="numeric"
-                    placeholder="Quantite preparee"
+                    placeholder={draft.status === 'partial' ? 'Quantite preparee' : 'Auto selon statut'}
                     placeholderTextColor="#8b97a8"
                   />
 
                   <TextInput
-                    style={styles.inputSmall}
+                    style={[styles.inputSmall, styles.inputNote]}
                     value={draft.note || ''}
                     onChangeText={(value) => setNote(item.reference, value)}
                     placeholder="Note (optionnel)"
                     placeholderTextColor="#8b97a8"
+                    multiline
                   />
                 </View>
               );
@@ -329,11 +390,12 @@ export function PreparateurScreen({ token, fullName }: Props) {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>4. Envoyer le rapport</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.inputNote]}
             value={globalComment}
             onChangeText={setGlobalComment}
             placeholder="Commentaire global"
             placeholderTextColor="#8b97a8"
+            multiline
           />
 
           <Pressable
@@ -343,11 +405,15 @@ export function PreparateurScreen({ token, fullName }: Props) {
           </Pressable>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   safe: {
     flex: 1,
     backgroundColor: '#f5f6f8',
@@ -355,7 +421,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 14,
     gap: 12,
-    paddingBottom: 22,
+    paddingBottom: 120,
   },
   headerCard: {
     borderRadius: 14,
@@ -422,32 +488,38 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#6b7280',
   },
-  chipsWrap: {
-    gap: 8,
-    paddingRight: 8,
+  blListWrap: {
+    maxHeight: 210,
   },
-  chip: {
-    minWidth: 132,
+  blListContent: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  blRow: {
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#dbeafe',
     backgroundColor: '#eff6ff',
     padding: 10,
-    gap: 3,
+    gap: 2,
   },
-  chipActive: {
+  blRowActive: {
     backgroundColor: '#2563eb',
     borderColor: '#2563eb',
   },
-  chipText: {
+  blTitle: {
     color: '#1e3a8a',
     fontWeight: '800',
   },
-  chipSub: {
+  blSub: {
     color: '#1d4ed8',
     fontSize: 12,
   },
-  chipTextActive: {
+  blMeta: {
+    color: '#334155',
+    fontSize: 12,
+  },
+  blTextActive: {
     color: '#ffffff',
   },
   sectionHeaderRow: {
@@ -459,8 +531,51 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: '700',
   },
+  activeBlCard: {
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#f0f9ff',
+    borderRadius: 10,
+    padding: 10,
+  },
+  activeBlTitle: {
+    color: '#0c4a6e',
+    fontWeight: '800',
+  },
+  activeBlSub: {
+    color: '#0369a1',
+    marginTop: 2,
+  },
+  statsBadgesWrap: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  statsBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statsBadgeOk: {
+    borderColor: '#a7f3d0',
+    backgroundColor: '#ecfdf5',
+    color: '#047857',
+  },
+  statsBadgePartial: {
+    borderColor: '#fde68a',
+    backgroundColor: '#fffbeb',
+    color: '#b45309',
+  },
+  statsBadgeMissing: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+    color: '#b91c1c',
+  },
   productsWrap: {
-    maxHeight: 360,
+    maxHeight: 420,
   },
   productsContent: {
     gap: 8,
@@ -514,6 +629,14 @@ const styles = StyleSheet.create({
     color: '#111827',
     paddingHorizontal: 10,
     paddingVertical: 8,
+  },
+  inputDisabled: {
+    backgroundColor: '#f8fafc',
+    color: '#94a3b8',
+  },
+  inputNote: {
+    minHeight: 42,
+    textAlignVertical: 'top',
   },
   primaryButton: {
     borderRadius: 10,
