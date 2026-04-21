@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LogoMark } from '@/components/brand/logo-mark';
 import { AdminScreen } from '@/components/bl/admin-screen';
 import { LoginScreen } from '@/components/bl/login-screen';
 import { PreparateurScreen } from '@/components/bl/preparateur-screen';
@@ -76,9 +77,12 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.topBar}>
-        <View>
-          <Text style={styles.roleBadge}>{roleLabel[user.role]}</Text>
-          <Text style={styles.userText}>{user.full_name}</Text>
+        <View style={styles.topBarLeft}>
+          <LogoMark size={34} />
+          <View>
+            <Text style={styles.roleBadge}>{roleLabel[user.role]}</Text>
+            <Text style={styles.userText}>{user.full_name}</Text>
+          </View>
         </View>
 
         <Pressable style={styles.logoutButton} onPress={onLogout}>
@@ -105,6 +109,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  topBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   roleBadge: {
     alignSelf: 'flex-start',

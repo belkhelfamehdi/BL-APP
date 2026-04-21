@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LogoMark } from '@/components/brand/logo-mark';
 import { Brand, BrandFonts } from '@/constants/brand';
 
 interface Props {
@@ -48,19 +49,12 @@ export function LoginScreen({ loading, error, onLogin }: Props) {
         <View pointerEvents="none" style={styles.bgOrbTop} />
         <View pointerEvents="none" style={styles.bgOrbBottom} />
 
-        <View style={styles.headerCard}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandMark} />
-            <View>
-              <Text style={styles.title}>DistriResto</Text>
-              <Text style={styles.subtitle}>Specialiste du fast food</Text>
+        <View style={styles.formCard}>
+          <View style={styles.formHeader}>
+            <View style={styles.logoFrame}>
+              <LogoMark  fill />
             </View>
           </View>
-          <Text style={styles.headerNote}>Connexion et operations par role</Text>
-        </View>
-
-        <View style={styles.formCard}>
-          <Text style={styles.sectionTitle}>Connexion</Text>
 
           <Text style={styles.label}>Nom utilisateur</Text>
           <TextInput
@@ -139,47 +133,47 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(15, 11, 8, 0.12)',
   },
-  headerCard: {
-    backgroundColor: Brand.ink,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Brand.inkSoft,
-  },
-  brandRow: {
-    flexDirection: 'row',
+  formHeader: {
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
+    marginBottom: 10,
   },
-  brandMark: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Brand.ember,
+  logoFrame: {
+    width: '100%',
+    maxWidth: 300,
+    alignSelf: 'center',
+    aspectRatio: 5,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Brand.border,
+    backgroundColor: '#fff7f0',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
     elevation: 6,
   },
   title: {
-    color: Brand.bone,
+    color: Brand.ink,
     fontSize: 28,
     fontWeight: '800',
     fontFamily: BrandFonts.title,
     letterSpacing: 0.6,
+    marginTop: 4,
   },
   subtitle: {
-    color: Brand.emberGlow,
+    color: Brand.emberDark,
     marginTop: 2,
     fontWeight: '600',
     fontFamily: BrandFonts.body,
   },
-  headerNote: {
-    marginTop: 10,
-    color: '#e7ddd5',
+  formNote: {
+    marginTop: 6,
+    color: Brand.muted,
     fontWeight: '600',
     fontFamily: BrandFonts.body,
+    textAlign: 'center',
   },
   formCard: {
     backgroundColor: Brand.card,
@@ -188,6 +182,11 @@ const styles = StyleSheet.create({
     borderColor: Brand.border,
     padding: 14,
     gap: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 6,
   },
   quickCard: {
     backgroundColor: Brand.card,
