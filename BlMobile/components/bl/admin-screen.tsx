@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
+import { Brand } from '@/constants/brand';
 import { AdminReportDetail, AdminReportSummary } from '@/types/app';
 
 interface Props {
@@ -24,53 +25,21 @@ function todayIso(): string {
 }
 
 function statusLabel(status: string): string {
-  if (status === 'available') {
-    return 'OK';
-  }
-  if (status === 'partial') {
-    return 'Partiel';
-  }
+  if (status === 'available') return 'OK';
+  if (status === 'partial') return 'Partiel';
   return 'Rupture';
 }
 
-function statusStyles(status: string) {
-  if (status === 'available') {
-    return { row: styles.tableRowOk, text: styles.statusTextOk };
-  }
-  if (status === 'partial') {
-    return { row: styles.tableRowPartial, text: styles.statusTextPartial };
-  }
-  return { row: styles.tableRowMissing, text: styles.statusTextMissing };
-}
-
-function parseNumber(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value.replace(',', '.'));
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-  return undefined;
-}
-
-function computeMissing(expected: unknown, prepared: unknown): number {
-  const expectedValue = parseNumber(expected);
-  if (expectedValue === undefined) {
-    return 0;
-  }
-  const preparedValue = parseNumber(prepared) ?? 0;
-  const missing = expectedValue - preparedValue;
-  return missing > 0 ? Number(missing.toFixed(3)) : 0;
+function statusColors(status: string): { bg: string; text: string } {
+  if (status === 'available') return { bg: '#e8f5e9', text: '#2e7d32' };
+  if (status === 'partial') return { bg: '#fff3e0', text: '#ef6c00' };
+  return { bg: '#ffebee', text: '#c62828' };
 }
 
 export function AdminScreen({ token, fullName }: Props) {
   const [reportDate, setReportDate] = useState(todayIso());
   const [reports, setReports] = useState<AdminReportSummary[]>([]);
   const [detail, setDetail] = useState<AdminReportDetail | null>(null);
-
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,8 +51,7 @@ export function AdminScreen({ token, fullName }: Props) {
       const res = await api.listAdminReports(token, reportDate);
       setReports(res.data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur chargement rapports');
-      setReports([]);
+      setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -96,8 +64,7 @@ export function AdminScreen({ token, fullName }: Props) {
       const res = await api.getAdminReportDetail(token, reportId);
       setDetail(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur detail rapport');
-      setDetail(null);
+      setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setDetailLoading(false);
     }
@@ -106,99 +73,91 @@ export function AdminScreen({ token, fullName }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.headerCard}>
-          <Text style={styles.headerTitle}>Rapports de preparation</Text>
-          <Text style={styles.headerSub}>Admin: {fullName}</Text>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Admin</Text>
+          <Text style={styles.headerSub}>{fullName}</Text>
         </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>1. Choisir la date</Text>
+        <View style={styles.dateRow}>
+          <Text style={styles.dateLabel}>{new Date(reportDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</Text>
           <TextInput
-            style={styles.input}
+            style={styles.dateInput}
             value={reportDate}
             onChangeText={setReportDate}
-            autoCapitalize="none"
-            placeholder="AAAA-MM-JJ"
-            placeholderTextColor="#8b97a8"
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={Brand.muted}
           />
-          <Pressable style={styles.primaryButton} onPress={loadReports}>
-            <Text style={styles.primaryText}>Charger les rapports</Text>
-          </Pressable>
         </View>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {loading ? <ActivityIndicator color="#2563eb" /> : null}
-        {!loading && reports.length === 0 ? (
-          <Text style={styles.emptyText}>Aucun rapport pour cette date.</Text>
-        ) : null}
+        <Pressable style={styles.reloadButton} onPress={loadReports}>
+          <Text style={styles.reloadText}>Actualiser</Text>
+        </Pressable>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>2. Ouvrir un rapport</Text>
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        <View style={styles.reportsList}>
+          <Text style={styles.sectionTitle}>Rapports ({reports.length})</Text>
+          {loading && <ActivityIndicator color={Brand.ink} style={styles.loader} />}
+          {!loading && reports.length === 0 && <Text style={styles.empty}>Aucun rapport</Text>}
           {reports.map((report) => (
             <Pressable key={report.report_id} style={styles.reportCard} onPress={() => openDetail(report.report_id)}>
               <View style={styles.reportHeader}>
-                <Text style={styles.reportTitle}>{report.destinataire || 'Client inconnu'}</Text>
-                <Text style={styles.reportTime}>{new Date(report.sent_at).toLocaleString()}</Text>
+                <Text style={styles.reportName}>{report.destinataire || 'Client'}</Text>
+                <Text style={styles.reportDate}>
+                  {new Date(report.sent_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
               </View>
-              <Text style={styles.reportSub}>BL #{report.bl_id}</Text>
-              <Text style={styles.reportSub}>Preparateur: {report.preparer_name}</Text>
-              <View style={styles.summaryRow}>
-                <Text style={[styles.summaryBadge, styles.summaryBadgeOk]}>OK {report.summary.available}</Text>
-                <Text style={[styles.summaryBadge, styles.summaryBadgePartial]}>Partiel {report.summary.partial}</Text>
-                <Text style={[styles.summaryBadge, styles.summaryBadgeMissing]}>Rupture {report.summary.not_available}</Text>
-                <Text style={[styles.summaryBadge, styles.summaryBadgeNeutral]}>Manque {report.summary.quantity_missing_total}</Text>
-                <Text style={[styles.summaryBadge, styles.summaryBadgeNeutral]}>Total {report.summary.items}</Text>
+              <Text style={styles.reportBl}>#{report.bl_id} • {report.preparer_name}</Text>
+              <View style={styles.statsRow}>
+                <View style={[styles.stat, { backgroundColor: '#e8f5e9' }]}>
+                  <Text style={[styles.statText, { color: '#2e7d32' }]}>OK {report.summary.available}</Text>
+                </View>
+                <View style={[styles.stat, { backgroundColor: '#fff3e0' }]}>
+                  <Text style={[styles.statText, { color: '#ef6c00' }]}>Partiel {report.summary.partial}</Text>
+                </View>
+                <View style={[styles.stat, { backgroundColor: '#ffebee' }]}>
+                  <Text style={[styles.statText, { color: '#c62828' }]}>Rupture {report.summary.not_available}</Text>
+                </View>
               </View>
             </Pressable>
           ))}
         </View>
       </ScrollView>
 
-      <Modal visible={detail !== null || detailLoading} animationType="slide" transparent>
+      <Modal visible={!!detail || detailLoading} animationType="slide" transparent>
         <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            {detailLoading ? <ActivityIndicator color="#2563eb" /> : null}
-
-            {detail ? (
+          <View style={styles.modal}>
+            {detailLoading && <ActivityIndicator color={Brand.ink} />}
+            {detail && (
               <>
-                <Text style={styles.modalTitle}>{detail.destinataire || 'Client inconnu'}</Text>
-                <Text style={styles.modalSub}>Rapport #{detail.report_id} - BL #{detail.bl_id}</Text>
-                <Text style={styles.modalSub}>Preparateur: {detail.preparer_name}</Text>
-                <Text style={styles.modalSub}>Date: {detail.report_date}</Text>
-                <Text style={styles.modalSub}>Commentaire: {detail.overall_comment || 'Aucun'}</Text>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{detail.destinataire}</Text>
+                  <Text style={styles.modalSub}>#{detail.bl_id} • {detail.preparer_name}</Text>
+                </View>
 
-                <ScrollView style={styles.tableWrap}>
-                  <View style={styles.tableHeaderRow}>
-                    <Text style={[styles.tableHeaderCell, styles.colRef]}>Reference</Text>
-                    <Text style={styles.tableHeaderCell}>Statut</Text>
-                    <Text style={styles.tableHeaderCell}>Attendue</Text>
-                    <Text style={styles.tableHeaderCell}>Preparee</Text>
-                    <Text style={styles.tableHeaderCell}>Manque</Text>
+                <ScrollView style={styles.table}>
+                  <View style={styles.tableHead}>
+                    <Text style={[styles.headCell, styles.refCol]}>Ref</Text>
+                    <Text style={styles.headCell}>Statut</Text>
+                    <Text style={styles.headCell}>Prep</Text>
                   </View>
-
                   {detail.items.map((item, idx) => {
-                    const statusStyle = statusStyles(item.status);
-                    const missingQuantity =
-                      item.quantity_missing !== undefined
-                        ? item.quantity_missing
-                        : computeMissing(item.quantity_expected, item.quantity_prepared);
-
+                    const colors = statusColors(item.status);
                     return (
-                    <View key={`${item.reference}-${idx}`} style={[styles.tableRow, statusStyle.row]}>
-                      <Text style={[styles.tableCell, styles.colRef]}>{item.reference}</Text>
-                      <Text style={[styles.tableCell, statusStyle.text]}>{statusLabel(item.status)}</Text>
-                      <Text style={styles.tableCell}>{item.quantity_expected ?? '-'}</Text>
-                      <Text style={styles.tableCell}>{item.quantity_prepared ?? '-'}</Text>
-                      <Text style={[styles.tableCell, styles.missingQtyText]}>{missingQuantity}</Text>
-                    </View>
-                  )})}
+                      <View key={`${item.reference}-${idx}`} style={[styles.tableRow, { backgroundColor: colors.bg }]}>
+                        <Text style={[styles.cell, styles.refCol]}>{item.reference}</Text>
+                        <Text style={[styles.cell, { color: colors.text }]}>{statusLabel(item.status)}</Text>
+                        <Text style={styles.cell}>{item.quantity_prepared ?? '-'}</Text>
+                      </View>
+                    );
+                  })}
                 </ScrollView>
-              </>
-            ) : null}
 
-            <Pressable style={styles.closeButton} onPress={() => setDetail(null)}>
-              <Text style={styles.closeText}>Fermer</Text>
-            </Pressable>
+                <Pressable style={styles.closeBtn} onPress={() => setDetail(null)}>
+                  <Text style={styles.closeBtnText}>Fermer</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -207,217 +166,71 @@ export function AdminScreen({ token, fullName }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#f5f6f8',
-  },
-  container: {
-    padding: 14,
-    gap: 12,
-    paddingBottom: 22,
-  },
-  headerCard: {
-    borderRadius: 14,
-    backgroundColor: '#111827',
-    padding: 14,
-  },
-  headerTitle: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 20,
-  },
-  headerSub: {
-    color: '#cbd5e1',
-    marginTop: 3,
-  },
-  sectionCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
-    padding: 12,
-    gap: 8,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    color: '#111827',
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  primaryButton: {
-    borderRadius: 10,
-    backgroundColor: '#2563eb',
-    alignItems: 'center',
-    paddingVertical: 11,
-  },
-  primaryText: {
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  errorText: {
-    color: '#b91c1c',
-    fontWeight: '700',
-    paddingHorizontal: 2,
-  },
-  emptyText: {
-    color: '#6b7280',
-    paddingHorizontal: 2,
-  },
-  reportCard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
-    padding: 10,
-    gap: 5,
-  },
-  reportHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  reportTitle: {
-    color: '#111827',
-    fontWeight: '800',
-  },
-  reportTime: {
-    color: '#6b7280',
-    fontSize: 12,
-  },
-  reportSub: {
-    color: '#334155',
-    fontSize: 12,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
-  summaryBadge: {
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  summaryBadgeOk: {
-    borderColor: '#a7f3d0',
-    backgroundColor: '#ecfdf5',
-    color: '#047857',
-  },
-  summaryBadgePartial: {
-    borderColor: '#fcd34d',
-    backgroundColor: '#fffbeb',
-    color: '#b45309',
-  },
-  summaryBadgeMissing: {
-    borderColor: '#fecaca',
-    backgroundColor: '#fef2f2',
-    color: '#b91c1c',
-  },
-  summaryBadgeNeutral: {
-    borderColor: '#dbeafe',
-    backgroundColor: '#eff6ff',
-    color: '#1e40af',
-  },
-  modalBg: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-    justifyContent: 'center',
-    padding: 14,
-  },
-  modalCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#dbe1ea',
-    backgroundColor: '#ffffff',
-    maxHeight: '86%',
-    padding: 14,
-    gap: 8,
-  },
-  modalTitle: {
-    color: '#111827',
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  modalSub: {
-    color: '#475569',
-    fontSize: 12,
-  },
-  tableWrap: {
-    maxHeight: 320,
-    marginTop: 6,
-  },
-  tableHeaderRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderColor: '#dbe1ea',
-    paddingBottom: 6,
-  },
-  tableRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderColor: '#eef2f7',
-    paddingVertical: 6,
-  },
-  tableRowOk: {
-    backgroundColor: '#f0fdf4',
-  },
-  tableRowPartial: {
-    backgroundColor: '#fffbeb',
-  },
-  tableRowMissing: {
-    backgroundColor: '#fef2f2',
-  },
-  tableHeaderCell: {
-    flex: 1,
-    color: '#0f172a',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  tableCell: {
-    flex: 1,
-    color: '#334155',
-    fontSize: 12,
-  },
-  statusTextOk: {
-    color: '#047857',
-    fontWeight: '700',
-  },
-  statusTextPartial: {
-    color: '#b45309',
-    fontWeight: '700',
-  },
-  statusTextMissing: {
-    color: '#b91c1c',
-    fontWeight: '700',
-  },
-  missingQtyText: {
-    color: '#b91c1c',
-    fontWeight: '700',
-  },
-  colRef: {
-    flex: 1.8,
-  },
-  closeButton: {
-    borderRadius: 10,
-    backgroundColor: '#2563eb',
-    alignItems: 'center',
+  safe: { flex: 1, backgroundColor: '#fff' },
+  container: { padding: 20, paddingBottom: 100 },
+  header: { marginBottom: 24 },
+  headerTitle: { fontSize: 28, fontWeight: '700', color: Brand.ink },
+  headerSub: { fontSize: 14, color: Brand.muted, marginTop: 4 },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  dateLabel: { flex: 1, fontSize: 16, fontWeight: '600', color: Brand.ink },
+  dateInput: {
+    width: 100,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
     paddingVertical: 10,
-    marginTop: 4,
+    fontSize: 14,
+    textAlign: 'center',
   },
-  closeText: {
-    color: '#ffffff',
-    fontWeight: '800',
+  reloadButton: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 20,
   },
+  reloadText: { fontSize: 14, fontWeight: '600', color: Brand.ink },
+  error: { color: Brand.danger, fontSize: 13, marginBottom: 16 },
+  loader: { marginVertical: 20 },
+  reportsList: { marginTop: 8 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: Brand.muted, marginBottom: 12 },
+  empty: { color: Brand.muted, textAlign: 'center', padding: 20 },
+  reportCard: {
+    backgroundColor: '#fafafa',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  reportHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  reportName: { fontSize: 15, fontWeight: '600', color: Brand.ink },
+  reportDate: { fontSize: 13, color: Brand.muted },
+  reportBl: { fontSize: 12, color: Brand.muted, marginTop: 2 },
+  statsRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  stat: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  statText: { fontSize: 11, fontWeight: '600' },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modal: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: { marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: Brand.ink },
+  modalSub: { fontSize: 13, color: Brand.muted, marginTop: 4 },
+  table: { maxHeight: 300 },
+  tableHead: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#eee', paddingBottom: 8, marginBottom: 8 },
+  headCell: { flex: 1, fontSize: 12, fontWeight: '600', color: Brand.muted },
+  tableRow: { flexDirection: 'row', paddingVertical: 8, borderRadius: 6, marginBottom: 4, paddingHorizontal: 8 },
+  cell: { flex: 1, fontSize: 13, color: Brand.ink },
+  refCol: { flex: 1.5 },
+  closeBtn: {
+    marginTop: 16,
+    backgroundColor: Brand.ink,
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  closeBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

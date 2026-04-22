@@ -6,7 +6,7 @@ import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
 type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
-type IconSymbolName = keyof typeof MAPPING;
+type IconSymbolName = keyof typeof MAPPING | 'bolt';
 
 /**
  * Add your SF Symbols to Material Icons mappings here.
@@ -18,6 +18,15 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'checkmark': 'check',
+  'checkmark.circle.fill': 'check-circle',
+  'xmark': 'close',
+  'arrow.clockwise': 'refresh',
+  'doc.text': 'description',
+  'clipboard': 'content-paste',
+  'trash': 'delete',
+  'plus': 'add',
+  'bolt.fill': 'bolt',
 } as IconMapping;
 
 /**

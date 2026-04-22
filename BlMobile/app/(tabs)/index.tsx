@@ -6,12 +6,13 @@ import { AdminScreen } from '@/components/bl/admin-screen';
 import { LoginScreen } from '@/components/bl/login-screen';
 import { PreparateurScreen } from '@/components/bl/preparateur-screen';
 import { ResponsableScreen } from '@/components/bl/responsable-screen';
+import { Brand } from '@/constants/brand';
 import { api } from '@/services/api';
 import { User } from '@/types/app';
 
 const roleLabel: Record<User['role'], string> = {
-  responsable: 'Responsable des BL',
-  preparateur: 'Preparateur',
+  responsable: 'Resp.',
+  preparateur: 'Prep.',
   admin: 'Admin',
 };
 
@@ -40,31 +41,20 @@ export default function HomeScreen() {
     setToken(null);
     setUser(null);
     setError(null);
-
-    if (!currentToken) {
-      return;
-    }
-
+    if (!currentToken) return;
     try {
       await api.logout(currentToken);
-    } catch {
-      // Ignore remote logout failure when local session is cleared.
-    }
+    } catch { }
   };
 
   const roleScreen = useMemo(() => {
-    if (!token || !user) {
-      return null;
-    }
-
+    if (!token || !user) return null;
     if (user.role === 'responsable') {
       return <ResponsableScreen token={token} fullName={user.full_name} />;
     }
-
     if (user.role === 'preparateur') {
       return <PreparateurScreen token={token} fullName={user.full_name} />;
     }
-
     return <AdminScreen token={token} fullName={user.full_name} />;
   }, [token, user]);
 
@@ -74,18 +64,19 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.topBar}>
+      <View style={styles.header}>
         <View>
-          <Text style={styles.roleBadge}>{roleLabel[user.role]}</Text>
-          <Text style={styles.userText}>{user.full_name}</Text>
+          <Text style={styles.appTitle}>BL</Text>
         </View>
-
-        <Pressable style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutText}>Deconnexion</Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.userName}>{user.full_name}</Text>
+          <Text style={styles.userRole}>{roleLabel[user.role]}</Text>
+        </View>
+        <Pressable style={styles.logoutBtn} onPress={onLogout}>
+          <Text style={styles.logoutText}>Quitter</Text>
         </Pressable>
       </View>
-
-      <View style={styles.body}>{roleScreen}</View>
+      <View style={styles.content}>{roleScreen}</View>
     </SafeAreaView>
   );
 }
@@ -93,46 +84,48 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f6f8',
+    backgroundColor: '#fff',
   },
-  topBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e6e8ee',
+  header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    backgroundColor: '#fff',
   },
-  roleBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#e8f5ff',
-    color: '#0b5cab',
-    borderRadius: 999,
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+  appTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Brand.ink,
+  },
+  headerRight: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  userName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Brand.ink,
+  },
+  userRole: {
     fontSize: 12,
-    fontWeight: '700',
+    color: Brand.muted,
+    marginTop: 2,
   },
-  userText: {
-    marginTop: 4,
-    color: '#1f2a37',
-    fontWeight: '700',
-  },
-  logoutButton: {
-    borderRadius: 10,
-    backgroundColor: '#1f2a37',
-    paddingHorizontal: 12,
+  logoutBtn: {
     paddingVertical: 8,
+    paddingHorizontal: 14,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
   },
   logoutText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 12,
+    fontSize: 13,
+    color: Brand.ink,
+    fontWeight: '500',
   },
-  body: {
+  content: {
     flex: 1,
   },
 });

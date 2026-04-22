@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,6 +10,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Brand } from '@/constants/brand';
+
 interface Props {
   loading: boolean;
   error: string | null;
@@ -19,13 +20,14 @@ interface Props {
 
 const quickUsers = [
   { label: 'Responsable', username: 'responsable.bl', password: 'RespBL123!' },
-  { label: 'Preparateur', username: 'preparateur.cmd', password: 'PrepCMD123!' },
+  { label: 'Prep', username: 'preparateur.cmd', password: 'PrepCMD123!' },
   { label: 'Admin', username: 'admin.bl', password: 'AdminBL123!' },
 ];
 
 export function LoginScreen({ loading, error, onLogin }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [focused, setFocused] = useState<string | null>(null);
 
   const canSubmit = useMemo(
     () => username.trim().length > 0 && password.trim().length > 0 && !loading,
@@ -33,65 +35,77 @@ export function LoginScreen({ loading, error, onLogin }: Props) {
   );
 
   const submit = async () => {
-    if (!canSubmit) {
-      return;
-    }
-
+    if (!canSubmit) return;
     await onLogin(username.trim(), password);
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
-        <View style={styles.headerCard}>
-          <Text style={styles.title}>BL Mobile</Text>
-          <Text style={styles.subtitle}>Connexion et operations par role</Text>
-        </View>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.logoText}>BL</Text>
+            <Text style={styles.title}>Bon de Livraison</Text>
+            <Text style={styles.subtitle}>Preparation quotidienne</Text>
+          </View>
 
-        <View style={styles.formCard}>
-          <Text style={styles.sectionTitle}>Connexion</Text>
+          <View style={styles.form}>
+            <View style={[styles.inputContainer, focused === 'username' && styles.inputFocused]}>
+              <TextInput
+                style={styles.input}
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Utilisateur"
+                placeholderTextColor={Brand.muted}
+                onFocus={() => setFocused('username')}
+                onBlur={() => setFocused(null)}
+              />
+            </View>
 
-          <Text style={styles.label}>Nom utilisateur</Text>
-          <TextInput
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            placeholder="responsable.bl"
-            placeholderTextColor="#8b97a8"
-          />
+            <View style={[styles.inputContainer, focused === 'password' && styles.inputFocused]}>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                placeholder="Mot de passe"
+                placeholderTextColor={Brand.muted}
+                onFocus={() => setFocused('password')}
+                onBlur={() => setFocused(null)}
+              />
+            </View>
 
-          <Text style={styles.label}>Mot de passe</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder="Votre mot de passe"
-            placeholderTextColor="#8b97a8"
-          />
+            {error ? (
+              <Text style={styles.error}>{error}</Text>
+            ) : null}
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            <Pressable
+              style={[styles.button, !canSubmit && styles.buttonDisabled]}
+              onPress={submit}
+              disabled={!canSubmit}>
+              <Text style={styles.buttonText}>
+                {loading ? 'Connexion...' : 'Se connecter'}
+              </Text>
+            </Pressable>
+          </View>
 
-          <Pressable style={[styles.primaryButton, !canSubmit && styles.disabled]} onPress={submit}>
-            {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryText}>Se connecter</Text>}
-          </Pressable>
-        </View>
-
-        <View style={styles.quickCard}>
-          <Text style={styles.sectionTitle}>Acces rapide (demo)</Text>
-          <View style={styles.quickRow}>
-            {quickUsers.map((user) => (
-              <Pressable
-                key={user.username}
-                style={styles.quickButton}
-                onPress={() => {
-                  setUsername(user.username);
-                  setPassword(user.password);
-                }}>
-                <Text style={styles.quickText}>{user.label}</Text>
-              </Pressable>
-            ))}
+          <View style={styles.quickAccess}>
+            <Text style={styles.quickLabel}>Demo</Text>
+            <View style={styles.quickButtons}>
+              {quickUsers.map((user) => (
+                <Pressable
+                  key={user.username}
+                  style={styles.quickButton}
+                  onPress={() => {
+                    setUsername(user.username);
+                    setPassword(user.password);
+                  }}>
+                  <Text style={styles.quickButtonText}>{user.label}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -102,98 +116,100 @@ export function LoginScreen({ loading, error, onLogin }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#f5f6f8',
+    backgroundColor: '#fff',
   },
   container: {
     flex: 1,
-    padding: 16,
-    gap: 12,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
     justifyContent: 'center',
   },
-  headerCard: {
-    backgroundColor: '#111827',
-    borderRadius: 16,
-    padding: 16,
+  header: {
+    alignItems: 'center',
+    marginBottom: 48,
+  },
+  logoText: {
+    fontSize: 48,
+    fontWeight: '200',
+    color: Brand.ember,
+    letterSpacing: 4,
   },
   title: {
-    color: '#ffffff',
-    fontSize: 30,
-    fontWeight: '800',
+    fontSize: 24,
+    fontWeight: '600',
+    color: Brand.ink,
+    marginTop: 8,
   },
   subtitle: {
-    color: '#d1d5db',
+    fontSize: 14,
+    color: Brand.muted,
     marginTop: 4,
-    fontWeight: '500',
   },
-  formCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
+  form: {
+    gap: 16,
+  },
+  inputContainer: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 14,
-    gap: 8,
+    borderColor: 'transparent',
   },
-  quickCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 14,
-    gap: 10,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  label: {
-    color: '#111827',
-    fontWeight: '700',
-    marginTop: 4,
+  inputFocused: {
+    backgroundColor: '#fff',
+    borderColor: Brand.ink,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#ffffff',
-    color: '#111827',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 16,
+    color: Brand.ink,
   },
-  errorText: {
-    color: '#b91c1c',
+  error: {
+    color: Brand.danger,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  button: {
+    backgroundColor: Brand.ink,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.4,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
-  primaryButton: {
-    marginTop: 8,
-    borderRadius: 10,
-    backgroundColor: '#2563eb',
-    paddingVertical: 12,
+  quickAccess: {
+    marginTop: 40,
     alignItems: 'center',
   },
-  primaryText: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 16,
+  quickLabel: {
+    fontSize: 11,
+    color: Brand.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
   },
-  disabled: {
-    opacity: 0.5,
-  },
-  quickRow: {
+  quickButtons: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    gap: 12,
   },
   quickButton: {
-    borderWidth: 1,
-    borderColor: '#c7d2fe',
-    backgroundColor: '#eef2ff',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
   },
-  quickText: {
-    color: '#1e40af',
-    fontWeight: '700',
+  quickButtonText: {
+    fontSize: 13,
+    color: Brand.ink,
+    fontWeight: '500',
   },
 });

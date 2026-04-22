@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
+import { Brand } from '@/constants/brand';
 import { ArticleBL, SelectionRow } from '@/types/app';
 
 interface Props {
@@ -32,32 +33,28 @@ export function ResponsableScreen({ token, fullName }: Props) {
   const [selectedMap, setSelectedMap] = useState<Record<number, boolean>>({});
   const [existingSelections, setExistingSelections] = useState<SelectionRow[]>([]);
   const [loadingArticles, setLoadingArticles] = useState(false);
-  const [loadingSelection, setLoadingSelection] = useState(false);
+  const [, setLoadingSelection] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const existingSelectedIds = useMemo(
-    () => existingSelections.map((row) => row.bl_id).sort((a, b) => a - b),
+  const existingSelectedIdsSet = useMemo(
+    () => new Set(existingSelections.map((row) => row.bl_id)),
     [existingSelections]
   );
 
-  const existingSelectedIdsSet = useMemo(() => new Set(existingSelectedIds), [existingSelectedIds]);
-
   const selectedIds = useMemo(
-    () => Object.entries(selectedMap).filter(([, selected]) => selected).map(([id]) => Number(id)).sort((a, b) => a - b),
+    () => Object.entries(selectedMap).filter(([, v]) => v).map(([k]) => Number(k)),
     [selectedMap]
   );
 
   const selectedCount = selectedIds.length;
 
   const hasPendingChanges = useMemo(() => {
-    if (selectedIds.length !== existingSelectedIds.length) {
-      return true;
-    }
-    const existingSet = new Set(existingSelectedIds);
+    if (selectedIds.length !== existingSelections.length) return true;
+    const existingSet = new Set(existingSelections.map((s) => s.bl_id));
     return selectedIds.some((id) => !existingSet.has(id));
-  }, [existingSelectedIds, selectedIds]);
+  }, [selectedIds, existingSelections]);
 
   const loadArticles = useCallback(async () => {
     try {
@@ -66,8 +63,7 @@ export function ResponsableScreen({ token, fullName }: Props) {
       const res = await api.listArticles();
       setArticles(res.data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur chargement BL');
-      setArticles([]);
+      setError(e instanceof Error ? e.message : 'Erreur chargement');
     } finally {
       setLoadingArticles(false);
     }
@@ -85,394 +81,247 @@ export function ResponsableScreen({ token, fullName }: Props) {
       }
       setSelectedMap(nextSelected);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur chargement selection');
-      setExistingSelections([]);
-      setSelectedMap({});
+      setError(e instanceof Error ? e.message : 'Erreur chargement');
     } finally {
       setLoadingSelection(false);
     }
   }, [targetDate, token]);
 
-  useEffect(() => {
-    void loadArticles();
-  }, [loadArticles]);
-
-  useEffect(() => {
-    void loadSelections();
-  }, [loadSelections]);
+  useEffect(() => { void loadArticles(); }, [loadArticles]);
+  useEffect(() => { void loadSelections(); }, [loadSelections]);
 
   const saveSelection = async () => {
-    if (!hasPendingChanges || saving) {
-      return;
-    }
-
+    if (!hasPendingChanges || saving) return;
     try {
       setSaving(true);
       setError(null);
       setSuccess(null);
       await api.createSelections(token, targetDate, selectedIds);
-      if (selectedCount === 0) {
-        setSuccess(`Selection vide enregistree pour ${targetDate}`);
-      } else {
-        setSuccess(`${selectedCount} BL enregistres pour ${targetDate}`);
-      }
+      setSuccess(selectedCount === 0 ? 'Selection vide' : `${selectedCount} BL enregistres`);
       await loadSelections();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur enregistrement selection');
+      setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setSaving(false);
     }
   };
 
+  const toggleItem = (id: number) => {
+    setSelectedMap((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag">
-        <View style={styles.headerCard}>
-          <Text style={styles.headerTitle}>Preparation du lendemain</Text>
-          <Text style={styles.headerSub}>Responsable: {fullName}</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Preparation</Text>
+            <Text style={styles.headerSubtitle}>
+              {new Date(targetDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </Text>
+          </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>1. Choisir la date et charger les donnees</Text>
-          <Text style={styles.label}>Date cible</Text>
-          <TextInput
-            style={styles.input}
-            value={targetDate}
-            onChangeText={setTargetDate}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="AAAA-MM-JJ"
-            placeholderTextColor="#8b97a8"
-          />
-          <View style={styles.rowButtons}>
-            <Pressable style={styles.secondaryButton} onPress={loadArticles}>
-              <Text style={styles.secondaryText}>Charger les BL</Text>
+          <View style={styles.dateRow}>
+            <Text style={styles.dateLabel}>Date</Text>
+            <TextInput
+              style={styles.dateInput}
+              value={targetDate}
+              onChangeText={setTargetDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={Brand.muted}
+            />
+          </View>
+
+          <View style={styles.actions}>
+            <Pressable style={styles.actionButton} onPress={loadArticles}>
+              <Text style={styles.actionText}>Charger BL</Text>
             </Pressable>
-            <Pressable style={styles.secondaryButton} onPress={loadSelections}>
-              <Text style={styles.secondaryText}>Charger la selection</Text>
+            <Pressable style={styles.actionButton} onPress={loadSelections}>
+              <Text style={styles.actionText}>Actualiser</Text>
             </Pressable>
           </View>
-        </View>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {success ? <Text style={styles.successText}>{success}</Text> : null}
+          {error && <Text style={styles.error}>{error}</Text>}
+          {success && <Text style={styles.success}>{success}</Text>}
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>2. Selectionner les BL</Text>
-          {loadingArticles ? <ActivityIndicator color="#2563eb" /> : null}
-          {!loadingArticles && articles.length === 0 ? (
-            <Text style={styles.emptyText}>Aucun BL charge. Clique sur le bouton Charger les BL.</Text>
-          ) : null}
+          <View style={styles.listSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>BL disponibles</Text>
+              <Text style={styles.sectionCount}>{articles.length}</Text>
+            </View>
 
-          <ScrollView
-            style={styles.listWrap}
-            contentContainerStyle={styles.listContent}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator>
+            {loadingArticles && (
+              <View style={styles.loading}>
+                <ActivityIndicator color={Brand.ink} />
+              </View>
+            )}
+
+            {!loadingArticles && articles.length === 0 && (
+              <Text style={styles.empty}>Aucun BL charge</Text>
+            )}
+
             {articles.map((item) => {
-              const isAlreadySelected = existingSelectedIdsSet.has(item.IDBL);
-              const isSelected = Boolean(selectedMap[item.IDBL]);
-              const isPendingAdd = !isAlreadySelected && isSelected;
-              const isPendingRemove = isAlreadySelected && !isSelected;
+              const isSaved = existingSelectedIdsSet.has(item.IDBL);
+              const isSelected = !!selectedMap[item.IDBL];
+              const isPending = isSelected !== isSaved;
 
               return (
                 <Pressable
                   key={item.IDBL}
-                  style={[
-                    styles.itemRow,
-                    isAlreadySelected && isSelected && styles.itemRowSaved,
-                    isPendingAdd && styles.itemRowPendingAdd,
-                    isPendingRemove && styles.itemRowPendingRemove,
-                  ]}
-                  onPress={() =>
-                    setSelectedMap((prev) => ({
-                      ...prev,
-                      [item.IDBL]: !prev[item.IDBL],
-                    }))
-                  }>
-                  <View
-                    style={[
-                      styles.checkbox,
-                      isSelected && styles.checkboxOn,
-                    ]}>
-                    <Text style={styles.checkboxText}>{isSelected ? 'X' : ''}</Text>
+                  style={[styles.item, isSaved && styles.itemSaved, isPending && !isSaved && styles.itemPending]}
+                  onPress={() => toggleItem(item.IDBL)}>
+                  <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>
+                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
                   </View>
                   <View style={styles.itemContent}>
-                    <Text style={styles.itemTitle}>{item.Destinataire || 'Destinataire inconnu'}</Text>
-                    <Text style={styles.itemSub}>BL #{item.IDBL}</Text>
-                    <Text style={styles.itemMeta}>Date BL: {String(item.DateBL)}</Text>
-                    {isAlreadySelected && isSelected ? <Text style={styles.itemSavedText}>Deja enregistre</Text> : null}
-                    {isPendingAdd ? <Text style={styles.itemAddedText}>Nouveau BL a enregistrer</Text> : null}
-                    {isPendingRemove ? <Text style={styles.itemRemovedText}>Sera retire a l enregistrement</Text> : null}
+                    <Text style={styles.itemTitle}>{item.Destinataire || 'Client'}</Text>
+                    <Text style={styles.itemMeta}>#{item.IDBL} • {item.DateBL}</Text>
                   </View>
+                  {isSaved && <Text style={styles.tag}>OK</Text>}
                 </Pressable>
               );
             })}
-          </ScrollView>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <View>
-            <Text style={styles.summaryTitle}>BL selectionnes</Text>
-            <Text style={styles.summaryCount}>{selectedCount}</Text>
-            <Text style={styles.summarySub}>Enregistres actuellement: {existingSelections.length}</Text>
-            <Text style={styles.summaryHint}>{hasPendingChanges ? 'Modifications non enregistrees' : 'Aucune modification'}</Text>
           </View>
-          <Pressable
-            style={[styles.primaryButton, (!hasPendingChanges || saving) && styles.disabled]}
-            onPress={saveSelection}>
-            {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryText}>Mettre a jour</Text>}
-          </Pressable>
-        </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>3. Selection deja enregistree ({targetDate})</Text>
-          {loadingSelection ? <ActivityIndicator color="#2563eb" /> : null}
-          {!loadingSelection && existingSelections.length === 0 ? (
-            <Text style={styles.emptyText}>Aucune selection enregistree pour cette date.</Text>
-          ) : null}
-
-          {existingSelections.map((row) => (
-            <View key={`${row.bl_id}-${row.selected_at}`} style={styles.savedRow}>
-              <Text style={styles.savedTitle}>{row.destinataire || 'Destinataire inconnu'}</Text>
-              <Text style={styles.savedMeta}>BL #{row.bl_id}</Text>
-              <Text style={styles.savedMeta}>Par: {row.selector_name}</Text>
+          <View style={styles.footer}>
+            <View style={styles.footerInfo}>
+              <Text style={styles.footerCount}>{selectedCount}</Text>
+              <Text style={styles.footerLabel}>BL selectionnes</Text>
             </View>
-          ))}
-        </View>
-      </ScrollView>
+            <Pressable
+              style={[styles.saveButton, (!hasPendingChanges || saving) && styles.saveButtonDisabled]}
+              onPress={saveSelection}
+              disabled={!hasPendingChanges || saving}>
+              <Text style={styles.saveButtonText}>
+                {saving ? 'Enregistrement...' : 'Enregistrer'}
+              </Text>
+            </Pressable>
+          </View>
+
+          {existingSelections.length > 0 && (
+            <View style={styles.historySection}>
+              <Text style={styles.historyTitle}>Selection du {targetDate}</Text>
+              {existingSelections.map((row) => (
+                <View key={`${row.bl_id}-${row.selected_at}`} style={styles.historyRow}>
+                  <Text style={styles.historyItem}>#{row.bl_id}</Text>
+                  <Text style={styles.historyMeta}>{row.destinataire}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
+  safe: { flex: 1, backgroundColor: '#fff' },
+  flex: { flex: 1 },
+  container: { padding: 20, paddingBottom: 100 },
+  header: { marginBottom: 24 },
+  headerTitle: { fontSize: 28, fontWeight: '700', color: Brand.ink },
+  headerSubtitle: { fontSize: 14, color: Brand.muted, marginTop: 4 },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  dateLabel: { fontSize: 14, fontWeight: '600', color: Brand.ink },
+  dateInput: {
     flex: 1,
-  },
-  safe: {
-    flex: 1,
-    backgroundColor: '#f5f6f8',
-  },
-  container: {
-    padding: 14,
-    gap: 12,
-    paddingBottom: 120,
-  },
-  headerCard: {
-    borderRadius: 14,
-    backgroundColor: '#111827',
-    padding: 14,
-  },
-  headerTitle: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 20,
-  },
-  headerSub: {
-    color: '#cbd5e1',
-    marginTop: 3,
-  },
-  sectionCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
-    padding: 12,
-    gap: 8,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  label: {
-    color: '#1f2937',
-    fontWeight: '700',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    color: '#111827',
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  rowButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  secondaryButton: {
-    flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
     paddingVertical: 10,
+    fontSize: 14,
+  },
+  actions: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  actionButton: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    paddingVertical: 12,
     alignItems: 'center',
   },
-  secondaryText: {
-    color: '#1d4ed8',
-    fontWeight: '700',
-  },
-  errorText: {
-    color: '#b91c1c',
-    fontWeight: '700',
-  },
-  successText: {
-    color: '#166534',
-    fontWeight: '700',
-  },
-  emptyText: {
-    color: '#6b7280',
-  },
-  listWrap: {
-    maxHeight: 300,
-  },
-  listContent: {
-    gap: 8,
-    paddingBottom: 4,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+  actionText: { fontSize: 14, fontWeight: '600', color: Brand.ink },
+  error: { color: Brand.danger, fontSize: 13, marginBottom: 16 },
+  success: { color: Brand.success, fontSize: 13, marginBottom: 16 },
+  listSection: { marginBottom: 20 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: Brand.ink },
+  sectionCount: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 10,
-    backgroundColor: '#ffffff',
-    padding: 10,
+    fontSize: 12,
+    color: Brand.muted,
   },
-  itemRowSaved: {
-    borderColor: '#bbf7d0',
-    backgroundColor: '#f0fdf4',
+  loading: { padding: 20, alignItems: 'center' },
+  empty: { color: Brand.muted, fontSize: 14, textAlign: 'center', padding: 20 },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    backgroundColor: '#fafafa',
+    borderRadius: 12,
+    marginBottom: 8,
   },
-  itemRowPendingAdd: {
-    borderColor: '#93c5fd',
-    backgroundColor: '#eff6ff',
-  },
-  itemRowPendingRemove: {
-    borderColor: '#fecaca',
-    backgroundColor: '#fef2f2',
-  },
+  itemSaved: { backgroundColor: '#e8f5e9' },
+  itemPending: { backgroundColor: '#fff3e0' },
   checkbox: {
     width: 24,
     height: 24,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderWidth: 2,
+    borderColor: '#ddd',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
-  checkboxOn: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
-  },
-  checkboxText: {
-    color: '#ffffff',
-    fontWeight: '800',
+  checkboxOn: { backgroundColor: Brand.ink, borderColor: Brand.ink },
+  checkmark: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  itemContent: { flex: 1 },
+  itemTitle: { fontSize: 15, fontWeight: '600', color: Brand.ink },
+  itemMeta: { fontSize: 12, color: Brand.muted, marginTop: 2 },
+  tag: {
     fontSize: 10,
-  },
-  itemContent: {
-    flex: 1,
-  },
-  itemTitle: {
-    color: '#111827',
-    fontWeight: '800',
-  },
-  itemSub: {
-    color: '#374151',
-    marginTop: 2,
-  },
-  itemMeta: {
-    color: '#6b7280',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  itemSavedText: {
-    color: '#15803d',
-    fontSize: 12,
-    marginTop: 2,
     fontWeight: '700',
+    color: Brand.success,
+    backgroundColor: '#c8e6c9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
   },
-  itemAddedText: {
-    color: '#1d4ed8',
-    fontSize: 12,
-    marginTop: 2,
-    fontWeight: '700',
-  },
-  itemRemovedText: {
-    color: '#b91c1c',
-    fontSize: 12,
-    marginTop: 2,
-    fontWeight: '700',
-  },
-  summaryCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#dbeafe',
-    backgroundColor: '#eff6ff',
-    padding: 12,
+  footer: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 16,
+    marginBottom: 24,
   },
-  summaryTitle: {
-    color: '#1e3a8a',
-    fontWeight: '700',
-  },
-  summaryCount: {
-    color: '#1d4ed8',
-    fontWeight: '800',
-    fontSize: 24,
-    marginTop: 2,
-  },
-  summarySub: {
-    color: '#64748b',
-    marginTop: 2,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  summaryHint: {
-    color: '#334155',
-    marginTop: 2,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  primaryButton: {
+  footerInfo: {},
+  footerCount: { fontSize: 32, fontWeight: '700', color: Brand.ink },
+  footerLabel: { fontSize: 12, color: Brand.muted },
+  saveButton: {
+    backgroundColor: Brand.ink,
     borderRadius: 10,
-    backgroundColor: '#2563eb',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
+  saveButtonDisabled: { opacity: 0.4 },
+  saveButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  historySection: { marginTop: 8 },
+  historyTitle: { fontSize: 14, fontWeight: '600', color: Brand.muted, marginBottom: 12 },
+  historyRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  primaryText: {
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  disabled: {
-    opacity: 0.45,
-  },
-  savedRow: {
-    borderWidth: 1,
-    borderColor: '#d1fae5',
-    borderRadius: 10,
+    gap: 8,
     padding: 10,
-    backgroundColor: '#ecfdf5',
-    marginBottom: 8,
+    backgroundColor: '#fafafa',
+    borderRadius: 8,
+    marginBottom: 6,
   },
-  savedTitle: {
-    color: '#065f46',
-    fontWeight: '800',
-  },
-  savedMeta: {
-    color: '#047857',
-    fontSize: 12,
-    marginTop: 2,
-  },
+  historyItem: { fontSize: 13, fontWeight: '600', color: Brand.ink },
+  historyMeta: { flex: 1, fontSize: 13, color: Brand.muted },
 });

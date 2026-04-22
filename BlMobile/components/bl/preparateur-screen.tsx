@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
+import { Brand } from '@/constants/brand';
 import { PreparationItemPayload, ProductStatus, SelectionRow } from '@/types/app';
 import { ProductLine, mapProducts } from '@/utils/products';
 
@@ -30,10 +31,10 @@ interface ProductDraft {
   note?: string;
 }
 
-const statusLabels: Record<ProductStatus, string> = {
-  available: 'OK',
-  partial: 'Partiel',
-  not_available: 'Rupture',
+const statusColors: Record<ProductStatus, { bg: string; text: string; border: string }> = {
+  available: { bg: '#e8f5e9', text: '#2e7d32', border: '#a5d6a7' },
+  partial: { bg: '#fff3e0', text: '#ef6c00', border: '#ffcc80' },
+  not_available: { bg: '#ffebee', text: '#c62828', border: '#ef9a9a' },
 };
 
 function todayIso(): string {
@@ -97,16 +98,14 @@ export function PreparateurScreen({ token, fullName }: Props) {
       setProducts([]);
       setDrafts({});
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur chargement selection');
+      setError(e instanceof Error ? e.message : 'Erreur');
       setSelectionRows([]);
     } finally {
       setLoadingSelection(false);
     }
   }, [targetDate, token]);
 
-  useEffect(() => {
-    void loadSelection();
-  }, [loadSelection]);
+  useEffect(() => { void loadSelection(); }, [loadSelection]);
 
   const openBl = useCallback(async (blId: number) => {
     try {
@@ -130,7 +129,7 @@ export function PreparateurScreen({ token, fullName }: Props) {
       setDrafts(nextDraft);
       setGlobalComment('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur chargement produits');
+      setError(e instanceof Error ? e.message : 'Erreur');
       setActiveBlId(null);
       setProducts([]);
       setDrafts({});
@@ -142,35 +141,22 @@ export function PreparateurScreen({ token, fullName }: Props) {
   const setStatus = (reference: string, status: ProductStatus) => {
     setDrafts((prev) => {
       const current = prev[reference];
-      if (!current) {
-        return prev;
-      }
+      if (!current) return prev;
 
       const next: ProductDraft = { ...current, status };
-      if (status === 'not_available') {
-        next.quantityPrepared = 0;
-      }
+      if (status === 'not_available') next.quantityPrepared = 0;
       if (status === 'available' && typeof current.quantityExpected === 'number') {
         next.quantityPrepared = current.quantityExpected;
       }
-
-      return {
-        ...prev,
-        [reference]: next,
-      };
+      return { ...prev, [reference]: next };
     });
   };
 
   const setPreparedQty = (reference: string, value: string) => {
-    const cleaned = value.trim();
-    const parsed = cleaned === '' ? undefined : Number(cleaned.replace(',', '.'));
-
+    const parsed = value.trim() === '' ? undefined : Number(value.replace(',', '.'));
     setDrafts((prev) => {
       const current = prev[reference];
-      if (!current) {
-        return prev;
-      }
-
+      if (!current) return prev;
       return {
         ...prev,
         [reference]: {
@@ -181,37 +167,25 @@ export function PreparateurScreen({ token, fullName }: Props) {
     });
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const setNote = (reference: string, value: string) => {
     setDrafts((prev) => {
       const current = prev[reference];
-      if (!current) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        [reference]: {
-          ...current,
-          note: value,
-        },
-      };
+      if (!current) return prev;
+      return { ...prev, [reference]: { ...current, note: value } };
     });
   };
 
   const sendReport = async () => {
-    if (!activeBlId || sending) {
-      return;
-    }
-
+    if (!activeBlId || sending) return;
     const items = Object.values(drafts);
     if (items.length === 0) {
-      Alert.alert('Information', 'Chargez un BL avant denvoyer le rapport.');
+      Alert.alert('Info', 'Chargez un BL avant.');
       return;
     }
-
     for (const item of items) {
       if (item.status === 'partial' && (item.quantityPrepared === undefined || item.quantityPrepared < 0)) {
-        Alert.alert('Quantite manquante', `Saisissez la quantite preperee pour ${item.reference}.`);
+        Alert.alert('Erreur', `Quantite pour ${item.reference}`);
         return;
       }
     }
@@ -235,14 +209,14 @@ export function PreparateurScreen({ token, fullName }: Props) {
         overall_comment: globalComment,
         items: payload,
       });
-      setSuccess(`Rapport envoye pour BL #${currentBlId}`);
+      setSuccess(`Rapport envoye BL #${currentBlId}`);
       setSelectionRows((prev) => prev.filter((row) => row.bl_id !== currentBlId));
       setActiveBlId(null);
       setProducts([]);
       setDrafts({});
       setGlobalComment('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur envoi rapport');
+      setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setSending(false);
     }
@@ -251,404 +225,217 @@ export function PreparateurScreen({ token, fullName }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag">
-        <View style={styles.headerCard}>
-          <Text style={styles.headerTitle}>Preparation des commandes</Text>
-          <Text style={styles.headerSub}>Preparateur: {fullName}</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Preparation</Text>
+            <Text style={styles.headerSub}>{fullName}</Text>
+          </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>1. Charger les BL du jour</Text>
-          <Text style={styles.label}>Date de preparation</Text>
-          <TextInput
-            style={styles.input}
-            value={targetDate}
-            onChangeText={setTargetDate}
-            autoCapitalize="none"
-            placeholder="AAAA-MM-JJ"
-            placeholderTextColor="#8b97a8"
-          />
-          <Pressable style={styles.secondaryButton} onPress={loadSelection}>
-            <Text style={styles.secondaryText}>Charger les BL selectionnes</Text>
+          <View style={styles.dateRow}>
+            <Text style={styles.dateLabel}>{new Date(targetDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</Text>
+            <TextInput
+              style={styles.dateInput}
+              value={targetDate}
+              onChangeText={setTargetDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={Brand.muted}
+            />
+          </View>
+
+          <Pressable style={styles.reloadButton} onPress={loadSelection}>
+            <Text style={styles.reloadText}>Actualiser</Text>
           </Pressable>
-        </View>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {success ? <Text style={styles.successText}>{success}</Text> : null}
+          {error && <Text style={styles.error}>{error}</Text>}
+          {success && <Text style={styles.success}>{success}</Text>}
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>2. Choisir un BL</Text>
-          {loadingSelection ? <ActivityIndicator color="#2563eb" /> : null}
-          {selectionRows.length === 0 ? <Text style={styles.emptyText}>Aucun BL charge.</Text> : null}
-
-          <ScrollView
-            style={styles.blListWrap}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator
-            contentContainerStyle={styles.blListContent}>
+          <View style={styles.blList}>
+            <Text style={styles.sectionTitle}>BL a preparer ({selectionRows.length})</Text>
+            {loadingSelection && <ActivityIndicator color={Brand.ink} style={styles.loader} />}
+            {!loadingSelection && selectionRows.length === 0 && <Text style={styles.empty}>Aucun BL</Text>}
             {selectionRows.map((row) => (
               <Pressable
                 key={`${row.bl_id}-${row.selected_at}`}
-                style={[styles.blRow, activeBlId === row.bl_id && styles.blRowActive]}
+                style={[styles.blCard, activeBlId === row.bl_id && styles.blCardActive]}
                 onPress={() => openBl(row.bl_id)}>
-                <Text style={[styles.blTitle, activeBlId === row.bl_id && styles.blTextActive]}>
-                  {row.destinataire || 'N/A'}
-                </Text>
-                <Text style={[styles.blSub, activeBlId === row.bl_id && styles.blTextActive]}>
-                  BL #{row.bl_id}
-                </Text>
-                <Text style={[styles.blMeta, activeBlId === row.bl_id && styles.blTextActive]}>
-                  Selectionne par: {row.selector_name}
-                </Text>
+                <View>
+                  <Text style={[styles.blName, activeBlId === row.bl_id && styles.blNameActive]}>{row.destinataire}</Text>
+                  <Text style={styles.blId}>#{row.bl_id}</Text>
+                </View>
               </Pressable>
             ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>3. Controler les produits</Text>
-            <Text style={styles.statsText}>{stats.total} refs</Text>
           </View>
 
-          {activeRow ? (
-            <View style={styles.activeBlCard}>
-              <Text style={styles.activeBlTitle}>{activeRow.destinataire || 'N/A'}</Text>
-              <Text style={styles.activeBlSub}>BL #{activeRow.bl_id}</Text>
-            </View>
-          ) : (
-            <Text style={styles.emptyText}>Choisissez un BL pour afficher ses produits.</Text>
-          )}
+          {activeBlId && (
+            <View style={styles.productsSection}>
+              <View style={styles.activeHeader}>
+                <Text style={styles.activeTitle}>{activeRow?.destinataire}</Text>
+                <Text style={styles.activeId}>#{activeBlId}</Text>
+              </View>
 
-          <View style={styles.statsBadgesWrap}>
-            <Text style={[styles.statsBadge, styles.statsBadgeOk]}>OK {stats.available}</Text>
-            <Text style={[styles.statsBadge, styles.statsBadgePartial]}>Partiel {stats.partial}</Text>
-            <Text style={[styles.statsBadge, styles.statsBadgeMissing]}>Rupture {stats.missing}</Text>
-          </View>
-
-          {loadingProducts ? <ActivityIndicator color="#2563eb" /> : null}
-          {!loadingProducts && activeBlId && products.length === 0 ? (
-            <Text style={styles.emptyText}>Aucun produit detecte pour ce BL.</Text>
-          ) : null}
-
-          <ScrollView
-            style={styles.productsWrap}
-            contentContainerStyle={styles.productsContent}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator>
-            {products.map((item) => {
-              const draft = drafts[item.reference];
-              if (!draft) {
-                return null;
-              }
-
-              return (
-                <View key={item.reference} style={styles.productCard}>
-                  <Text style={styles.productTitle}>{item.reference}</Text>
-                  <Text style={styles.productMeta}>Qte attendue: {item.quantityExpected ?? 'N/A'}</Text>
-
-                  <View style={styles.statusRow}>
-                    {(['available', 'partial', 'not_available'] as ProductStatus[]).map((status) => (
-                      <Pressable
-                        key={`${item.reference}-${status}`}
-                        style={[styles.statusButton, draft.status === status && styles.statusButtonActive]}
-                        onPress={() => setStatus(item.reference, status)}>
-                        <Text style={[styles.statusText, draft.status === status && styles.statusTextActive]}>
-                          {statusLabels[status]}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-
-                  <TextInput
-                    style={[styles.inputSmall, draft.status !== 'partial' && styles.inputDisabled]}
-                    value={draft.quantityPrepared !== undefined ? String(draft.quantityPrepared) : ''}
-                    onChangeText={(value) => setPreparedQty(item.reference, value)}
-                    editable={draft.status === 'partial'}
-                    keyboardType="numeric"
-                    placeholder={draft.status === 'partial' ? 'Quantite preparee' : 'Auto selon statut'}
-                    placeholderTextColor="#8b97a8"
-                  />
-
-                  <TextInput
-                    style={[styles.inputSmall, styles.inputNote]}
-                    value={draft.note || ''}
-                    onChangeText={(value) => setNote(item.reference, value)}
-                    placeholder="Note (optionnel)"
-                    placeholderTextColor="#8b97a8"
-                    multiline
-                  />
+              <View style={styles.statsRow}>
+                <View style={[styles.statBadge, { backgroundColor: statusColors.available.bg }]}>
+                  <Text style={[styles.statText, { color: statusColors.available.text }]}>OK {stats.available}</Text>
                 </View>
-              );
-            })}
-          </ScrollView>
-        </View>
+                <View style={[styles.statBadge, { backgroundColor: statusColors.partial.bg }]}>
+                  <Text style={[styles.statText, { color: statusColors.partial.text }]}>Partiel {stats.partial}</Text>
+                </View>
+                <View style={[styles.statBadge, { backgroundColor: statusColors.not_available.bg }]}>
+                  <Text style={[styles.statText, { color: statusColors.not_available.text }]}>Rupture {stats.missing}</Text>
+                </View>
+              </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>4. Envoyer le rapport</Text>
-          <TextInput
-            style={[styles.input, styles.inputNote]}
-            value={globalComment}
-            onChangeText={setGlobalComment}
-            placeholder="Commentaire global"
-            placeholderTextColor="#8b97a8"
-            multiline
-          />
+              {loadingProducts && <ActivityIndicator color={Brand.ink} style={styles.loader} />}
 
-          <Pressable
-            style={[styles.primaryButton, (sending || !activeBlId || stats.total === 0) && styles.disabled]}
-            onPress={sendReport}>
-            {sending ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryText}>Envoyer rapport</Text>}
-          </Pressable>
-        </View>
-      </ScrollView>
+              {!loadingProducts && products.map((item) => {
+                const draft = drafts[item.reference];
+                if (!draft) return null;
+                const colors = statusColors[draft.status];
+
+                return (
+                  <View key={item.reference} style={styles.productCard}>
+                    <View style={styles.productHeader}>
+                      <Text style={styles.productRef}>{item.reference}</Text>
+                      <Text style={styles.productQty}>→ {item.quantityExpected}</Text>
+                    </View>
+
+                    <View style={styles.statusButtons}>
+                      {(['available', 'partial', 'not_available'] as ProductStatus[]).map((status) => (
+                        <Pressable
+                          key={status}
+                          style={[styles.statusBtn, draft.status === status && { backgroundColor: colors.bg, borderColor: colors.border }]}
+                          onPress={() => setStatus(item.reference, status)}>
+                          <Text style={[styles.statusBtnText, draft.status === status && { color: colors.text }]}>
+                            {status === 'available' ? 'OK' : status === 'partial' ? 'Partiel' : 'Rupture'}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    {draft.status === 'partial' && (
+                      <TextInput
+                        style={styles.qtyInput}
+                        value={draft.quantityPrepared !== undefined ? String(draft.quantityPrepared) : ''}
+                        onChangeText={(v) => setPreparedQty(item.reference, v)}
+                        keyboardType="numeric"
+                        placeholder="Qte Preparee"
+                        placeholderTextColor={Brand.muted}
+                      />
+                    )}
+                  </View>
+                );
+              })}
+
+              <TextInput
+                style={styles.commentInput}
+                value={globalComment}
+                onChangeText={setGlobalComment}
+                placeholder="Commentaire..."
+                placeholderTextColor={Brand.muted}
+                multiline
+              />
+
+              <Pressable
+                style={[styles.sendButton, (sending || stats.total === 0) && styles.sendButtonDisabled]}
+                onPress={sendReport}
+                disabled={sending || stats.total === 0}>
+                <Text style={styles.sendButtonText}>{sending ? 'Envoi...' : 'Envoyer'}</Text>
+              </Pressable>
+            </View>
+          )}
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  safe: {
-    flex: 1,
-    backgroundColor: '#f5f6f8',
-  },
-  container: {
-    padding: 14,
-    gap: 12,
-    paddingBottom: 120,
-  },
-  headerCard: {
-    borderRadius: 14,
-    backgroundColor: '#111827',
-    padding: 14,
-  },
-  headerTitle: {
-    color: '#ffffff',
-    fontWeight: '800',
-    fontSize: 20,
-  },
-  headerSub: {
-    color: '#cbd5e1',
-    marginTop: 3,
-  },
-  sectionCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
-    padding: 12,
-    gap: 8,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  label: {
-    color: '#1f2937',
-    fontWeight: '700',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    color: '#111827',
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  secondaryButton: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    backgroundColor: '#eff6ff',
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  secondaryText: {
-    color: '#1d4ed8',
-    fontWeight: '700',
-  },
-  errorText: {
-    color: '#b91c1c',
-    fontWeight: '700',
-    paddingHorizontal: 2,
-  },
-  successText: {
-    color: '#166534',
-    fontWeight: '700',
-    paddingHorizontal: 2,
-  },
-  emptyText: {
-    color: '#6b7280',
-  },
-  blListWrap: {
-    maxHeight: 210,
-  },
-  blListContent: {
-    gap: 8,
-    paddingBottom: 4,
-  },
-  blRow: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#dbeafe',
-    backgroundColor: '#eff6ff',
-    padding: 10,
-    gap: 2,
-  },
-  blRowActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
-  },
-  blTitle: {
-    color: '#1e3a8a',
-    fontWeight: '800',
-  },
-  blSub: {
-    color: '#1d4ed8',
-    fontSize: 12,
-  },
-  blMeta: {
-    color: '#334155',
-    fontSize: 12,
-  },
-  blTextActive: {
-    color: '#ffffff',
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statsText: {
-    color: '#2563eb',
-    fontWeight: '700',
-  },
-  activeBlCard: {
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    backgroundColor: '#f0f9ff',
-    borderRadius: 10,
-    padding: 10,
-  },
-  activeBlTitle: {
-    color: '#0c4a6e',
-    fontWeight: '800',
-  },
-  activeBlSub: {
-    color: '#0369a1',
-    marginTop: 2,
-  },
-  statsBadgesWrap: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  statsBadge: {
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statsBadgeOk: {
-    borderColor: '#a7f3d0',
-    backgroundColor: '#ecfdf5',
-    color: '#047857',
-  },
-  statsBadgePartial: {
-    borderColor: '#fde68a',
-    backgroundColor: '#fffbeb',
-    color: '#b45309',
-  },
-  statsBadgeMissing: {
-    borderColor: '#fecaca',
-    backgroundColor: '#fef2f2',
-    color: '#b91c1c',
-  },
-  productsWrap: {
-    maxHeight: 420,
-  },
-  productsContent: {
-    gap: 8,
-    paddingBottom: 4,
-  },
-  productCard: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    padding: 10,
-    gap: 7,
-  },
-  productTitle: {
-    color: '#111827',
-    fontWeight: '800',
-  },
-  productMeta: {
-    color: '#6b7280',
-    fontSize: 12,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  statusButton: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 999,
+  safe: { flex: 1, backgroundColor: '#fff' },
+  flex: { flex: 1 },
+  container: { padding: 20, paddingBottom: 100 },
+  header: { marginBottom: 24 },
+  headerTitle: { fontSize: 28, fontWeight: '700', color: Brand.ink },
+  headerSub: { fontSize: 14, color: Brand.muted, marginTop: 4 },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  dateLabel: { flex: 1, fontSize: 16, fontWeight: '600', color: Brand.ink },
+  dateInput: {
+    width: 100,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 10,
+    fontSize: 14,
+    textAlign: 'center',
   },
-  statusButtonActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
-  },
-  statusText: {
-    color: '#334155',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statusTextActive: {
-    color: '#ffffff',
-  },
-  inputSmall: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
+  reloadButton: {
+    backgroundColor: '#f5f5f5',
     borderRadius: 10,
-    backgroundColor: '#ffffff',
-    color: '#111827',
-    paddingHorizontal: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  reloadText: { fontSize: 14, fontWeight: '600', color: Brand.ink },
+  error: { color: Brand.danger, fontSize: 13, marginBottom: 16 },
+  success: { color: Brand.success, fontSize: 13, marginBottom: 16 },
+  loader: { marginVertical: 20 },
+  empty: { color: Brand.muted, textAlign: 'center', padding: 20 },
+  blList: { marginBottom: 20 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: Brand.muted, marginBottom: 12 },
+  blCard: {
+    backgroundColor: '#fafafa',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+  },
+  blCardActive: { backgroundColor: Brand.ink },
+  blName: { fontSize: 15, fontWeight: '600', color: Brand.ink },
+  blNameActive: { color: '#fff' },
+  blId: { fontSize: 12, color: Brand.muted, marginTop: 2 },
+  productsSection: { marginTop: 8 },
+  activeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  activeTitle: { fontSize: 18, fontWeight: '600', color: Brand.ink },
+  activeId: { fontSize: 14, color: Brand.muted },
+  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  statBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  statText: { fontSize: 12, fontWeight: '600' },
+  productCard: { backgroundColor: '#fafafa', borderRadius: 12, padding: 14, marginBottom: 12 },
+  productHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  productRef: { fontSize: 14, fontWeight: '600', color: Brand.ink },
+  productQty: { fontSize: 14, color: Brand.muted },
+  statusButtons: { flexDirection: 'row', gap: 8 },
+  statusBtn: {
+    flex: 1,
     paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eee',
+    alignItems: 'center',
   },
-  inputDisabled: {
-    backgroundColor: '#f8fafc',
-    color: '#94a3b8',
+  statusBtnText: { fontSize: 12, fontWeight: '600', color: Brand.muted },
+  qtyInput: {
+    marginTop: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
   },
-  inputNote: {
-    minHeight: 42,
+  commentInput: {
+    marginTop: 8,
+    backgroundColor: '#fafafa',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 14,
+    minHeight: 80,
     textAlignVertical: 'top',
   },
-  primaryButton: {
-    borderRadius: 10,
-    backgroundColor: '#2563eb',
+  sendButton: {
+    marginTop: 16,
+    backgroundColor: Brand.ink,
+    borderRadius: 12,
+    paddingVertical: 16,
     alignItems: 'center',
-    paddingVertical: 11,
   },
-  primaryText: {
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  disabled: {
-    opacity: 0.45,
-  },
+  sendButtonDisabled: { opacity: 0.4 },
+  sendButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
