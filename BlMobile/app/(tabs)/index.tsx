@@ -2,12 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { LogoMark } from '@/components/brand/logo-mark';
 import { AdminScreen } from '@/components/bl/admin-screen';
 import { LoginScreen } from '@/components/bl/login-screen';
 import { PreparateurScreen } from '@/components/bl/preparateur-screen';
 import { ResponsableScreen } from '@/components/bl/responsable-screen';
-import { Brand, BrandFonts } from '@/constants/brand';
 import { api } from '@/services/api';
 import { User } from '@/types/app';
 
@@ -77,12 +75,9 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.topBar}>
-        <View style={styles.topBarLeft}>
-          <LogoMark size={34} />
-          <View>
-            <Text style={styles.roleBadge}>{roleLabel[user.role]}</Text>
-            <Text style={styles.userText}>{user.full_name}</Text>
-          </View>
+        <View>
+          <Text style={styles.roleBadge}>{roleLabel[user.role]}</Text>
+          <Text style={styles.userText}>{user.full_name}</Text>
         </View>
 
         <Pressable style={styles.logoutButton} onPress={onLogout}>
@@ -98,52 +93,44 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Brand.bone,
+    backgroundColor: '#f5f6f8',
   },
   topBar: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: Brand.ink,
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: Brand.inkSoft,
+    borderBottomColor: '#e6e8ee',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  topBarLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
   roleBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: Brand.ember,
-    color: Brand.ink,
+    backgroundColor: '#e8f5ff',
+    color: '#0b5cab',
     borderRadius: 999,
     overflow: 'hidden',
     paddingHorizontal: 10,
     paddingVertical: 3,
     fontSize: 12,
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   userText: {
     marginTop: 4,
-    color: Brand.bone,
+    color: '#1f2a37',
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   logoutButton: {
     borderRadius: 10,
-    backgroundColor: Brand.ember,
+    backgroundColor: '#1f2a37',
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   logoutText: {
-    color: Brand.ink,
+    color: '#ffffff',
     fontWeight: '700',
     fontSize: 12,
-    fontFamily: BrandFonts.body,
   },
   body: {
     flex: 1,

@@ -13,7 +13,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
-import { Brand, BrandFonts } from '@/constants/brand';
 import { ArticleBL, SelectionRow } from '@/types/app';
 
 interface Props {
@@ -23,7 +22,7 @@ interface Props {
 
 function tomorrowIso(): string {
   const d = new Date();
-  d.setDate(d.getDate());
+  d.setDate(d.getDate() + 1);
   return d.toISOString().slice(0, 10);
 }
 
@@ -257,7 +256,7 @@ const styles = StyleSheet.create({
   },
   safe: {
     flex: 1,
-    backgroundColor: Brand.bone,
+    backgroundColor: '#f5f6f8',
   },
   container: {
     padding: 14,
@@ -266,51 +265,43 @@ const styles = StyleSheet.create({
   },
   headerCard: {
     borderRadius: 14,
-    backgroundColor: Brand.ink,
+    backgroundColor: '#111827',
     padding: 14,
-    borderWidth: 1,
-    borderColor: Brand.inkSoft,
   },
   headerTitle: {
-    color: Brand.bone,
+    color: '#ffffff',
     fontWeight: '800',
     fontSize: 20,
-    fontFamily: BrandFonts.title,
-    letterSpacing: 0.4,
   },
   headerSub: {
-    color: Brand.emberGlow,
+    color: '#cbd5e1',
     marginTop: 3,
-    fontFamily: BrandFonts.body,
   },
   sectionCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: Brand.card,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
     padding: 12,
     gap: 8,
   },
   sectionTitle: {
-    color: Brand.ink,
+    color: '#111827',
     fontWeight: '800',
     fontSize: 15,
-    fontFamily: BrandFonts.title,
   },
   label: {
-    color: Brand.inkSoft,
+    color: '#1f2937',
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   input: {
     borderWidth: 1,
-    borderColor: Brand.border,
+    borderColor: '#d1d5db',
     borderRadius: 10,
-    backgroundColor: '#fffaf6',
-    color: Brand.ink,
+    backgroundColor: '#ffffff',
+    color: '#111827',
     paddingHorizontal: 10,
     paddingVertical: 9,
-    fontFamily: BrandFonts.body,
   },
   rowButtons: {
     flexDirection: 'row',
@@ -320,29 +311,25 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Brand.emberGlow,
-    backgroundColor: '#fff3ea',
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
     paddingVertical: 10,
     alignItems: 'center',
   },
   secondaryText: {
-    color: Brand.emberDark,
+    color: '#1d4ed8',
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   errorText: {
-    color: Brand.danger,
+    color: '#b91c1c',
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   successText: {
-    color: Brand.success,
+    color: '#166534',
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   emptyText: {
-    color: Brand.muted,
-    fontFamily: BrandFonts.body,
+    color: '#6b7280',
   },
   listWrap: {
     maxHeight: 300,
@@ -355,39 +342,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     borderWidth: 1,
-    borderColor: Brand.border,
+    borderColor: '#e5e7eb',
     borderRadius: 10,
-    backgroundColor: Brand.card,
+    backgroundColor: '#ffffff',
     padding: 10,
   },
   itemRowSaved: {
-    borderColor: '#b7ebc8',
-    backgroundColor: '#eef8f2',
+    borderColor: '#bbf7d0',
+    backgroundColor: '#f0fdf4',
   },
   itemRowPendingAdd: {
-    borderColor: Brand.emberGlow,
-    backgroundColor: '#fff4ec',
+    borderColor: '#93c5fd',
+    backgroundColor: '#eff6ff',
   },
   itemRowPendingRemove: {
-    borderColor: '#f5b4aa',
-    backgroundColor: '#fff1ef',
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
   },
   checkbox: {
     width: 24,
     height: 24,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: Brand.border,
+    borderColor: '#d1d5db',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
   },
   checkboxOn: {
-    backgroundColor: Brand.ember,
-    borderColor: Brand.emberDark,
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
   },
   checkboxText: {
-    color: Brand.ink,
+    color: '#ffffff',
     fontWeight: '800',
     fontSize: 10,
   },
@@ -395,110 +382,97 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemTitle: {
-    color: Brand.ink,
+    color: '#111827',
     fontWeight: '800',
-    fontFamily: BrandFonts.body,
   },
   itemSub: {
-    color: Brand.inkSoft,
+    color: '#374151',
     marginTop: 2,
-    fontFamily: BrandFonts.body,
   },
   itemMeta: {
-    color: Brand.muted,
+    color: '#6b7280',
     fontSize: 12,
     marginTop: 2,
-    fontFamily: BrandFonts.body,
   },
   itemSavedText: {
-    color: Brand.success,
+    color: '#15803d',
     fontSize: 12,
     marginTop: 2,
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   itemAddedText: {
-    color: Brand.emberDark,
+    color: '#1d4ed8',
     fontSize: 12,
     marginTop: 2,
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   itemRemovedText: {
-    color: Brand.danger,
+    color: '#b91c1c',
     fontSize: 12,
     marginTop: 2,
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   summaryCard: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Brand.emberGlow,
-    backgroundColor: Brand.sand,
+    borderColor: '#dbeafe',
+    backgroundColor: '#eff6ff',
     padding: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   summaryTitle: {
-    color: Brand.ink,
+    color: '#1e3a8a',
     fontWeight: '700',
-    fontFamily: BrandFonts.title,
   },
   summaryCount: {
-    color: Brand.emberDark,
+    color: '#1d4ed8',
     fontWeight: '800',
     fontSize: 24,
     marginTop: 2,
-    fontFamily: BrandFonts.title,
   },
   summarySub: {
-    color: Brand.muted,
+    color: '#64748b',
     marginTop: 2,
     fontSize: 12,
     fontWeight: '600',
-    fontFamily: BrandFonts.body,
   },
   summaryHint: {
-    color: Brand.inkSoft,
+    color: '#334155',
     marginTop: 2,
     fontSize: 12,
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
   primaryButton: {
     borderRadius: 10,
-    backgroundColor: Brand.ember,
+    backgroundColor: '#2563eb',
     alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   primaryText: {
-    color: Brand.ink,
+    color: '#ffffff',
     fontWeight: '800',
-    fontFamily: BrandFonts.body,
   },
   disabled: {
     opacity: 0.45,
   },
   savedRow: {
     borderWidth: 1,
-    borderColor: '#ccebd8',
+    borderColor: '#d1fae5',
     borderRadius: 10,
     padding: 10,
-    backgroundColor: '#f2fbf5',
+    backgroundColor: '#ecfdf5',
     marginBottom: 8,
   },
   savedTitle: {
-    color: Brand.inkSoft,
+    color: '#065f46',
     fontWeight: '800',
-    fontFamily: BrandFonts.body,
   },
   savedMeta: {
-    color: Brand.muted,
+    color: '#047857',
     fontSize: 12,
     marginTop: 2,
-    fontFamily: BrandFonts.body,
   },
 });

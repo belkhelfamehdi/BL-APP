@@ -11,9 +11,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { LogoMark } from '@/components/brand/logo-mark';
-import { Brand, BrandFonts } from '@/constants/brand';
-
 interface Props {
   loading: boolean;
   error: string | null;
@@ -46,15 +43,13 @@ export function LoginScreen({ loading, error, onLogin }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
-        <View pointerEvents="none" style={styles.bgOrbTop} />
-        <View pointerEvents="none" style={styles.bgOrbBottom} />
+        <View style={styles.headerCard}>
+          <Text style={styles.title}>BL Mobile</Text>
+          <Text style={styles.subtitle}>Connexion et operations par role</Text>
+        </View>
 
         <View style={styles.formCard}>
-          <View style={styles.formHeader}>
-            <View style={styles.logoFrame}>
-              <LogoMark  fill />
-            </View>
-          </View>
+          <Text style={styles.sectionTitle}>Connexion</Text>
 
           <Text style={styles.label}>Nom utilisateur</Text>
           <TextInput
@@ -107,7 +102,7 @@ export function LoginScreen({ loading, error, onLogin }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: Brand.bone,
+    backgroundColor: '#f5f6f8',
   },
   container: {
     flex: 1,
@@ -115,127 +110,71 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: 'center',
   },
-  bgOrbTop: {
-    position: 'absolute',
-    top: -60,
-    right: -40,
-    width: 180,
-    height: 180,
-    borderRadius: 999,
-    backgroundColor: 'rgba(243, 107, 28, 0.18)',
-  },
-  bgOrbBottom: {
-    position: 'absolute',
-    bottom: -80,
-    left: -60,
-    width: 220,
-    height: 220,
-    borderRadius: 999,
-    backgroundColor: 'rgba(15, 11, 8, 0.12)',
-  },
-  formHeader: {
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
-  },
-  logoFrame: {
-    width: '100%',
-    maxWidth: 300,
-    alignSelf: 'center',
-    aspectRatio: 5,
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: '#fff7f0',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 6,
+  headerCard: {
+    backgroundColor: '#111827',
+    borderRadius: 16,
+    padding: 16,
   },
   title: {
-    color: Brand.ink,
-    fontSize: 28,
+    color: '#ffffff',
+    fontSize: 30,
     fontWeight: '800',
-    fontFamily: BrandFonts.title,
-    letterSpacing: 0.6,
-    marginTop: 4,
   },
   subtitle: {
-    color: Brand.emberDark,
-    marginTop: 2,
-    fontWeight: '600',
-    fontFamily: BrandFonts.body,
-  },
-  formNote: {
-    marginTop: 6,
-    color: Brand.muted,
-    fontWeight: '600',
-    fontFamily: BrandFonts.body,
-    textAlign: 'center',
+    color: '#d1d5db',
+    marginTop: 4,
+    fontWeight: '500',
   },
   formCard: {
-    backgroundColor: Brand.card,
+    backgroundColor: '#ffffff',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Brand.border,
+    borderColor: '#e5e7eb',
     padding: 14,
     gap: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 6,
   },
   quickCard: {
-    backgroundColor: Brand.card,
+    backgroundColor: '#ffffff',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Brand.border,
+    borderColor: '#e5e7eb',
     padding: 14,
     gap: 10,
   },
   sectionTitle: {
-    color: Brand.ink,
+    color: '#111827',
     fontWeight: '800',
-    fontSize: 16,
-    fontFamily: BrandFonts.title,
-    letterSpacing: 0.3,
+    fontSize: 15,
   },
   label: {
-    color: Brand.inkSoft,
+    color: '#111827',
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
     marginTop: 4,
   },
   input: {
     borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: '#fffaf6',
-    color: Brand.ink,
+    borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
+    color: '#111827',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontFamily: BrandFonts.body,
   },
   errorText: {
-    color: Brand.danger,
-    fontWeight: '700',
-    fontFamily: BrandFonts.body,
+    color: '#b91c1c',
+    fontWeight: '600',
   },
   primaryButton: {
     marginTop: 8,
     borderRadius: 10,
-    backgroundColor: Brand.ember,
+    backgroundColor: '#2563eb',
     paddingVertical: 12,
     alignItems: 'center',
   },
   primaryText: {
-    color: Brand.ink,
+    color: '#ffffff',
     fontWeight: '800',
     fontSize: 16,
-    fontFamily: BrandFonts.body,
   },
   disabled: {
     opacity: 0.5,
@@ -247,15 +186,14 @@ const styles = StyleSheet.create({
   },
   quickButton: {
     borderWidth: 1,
-    borderColor: Brand.emberGlow,
-    backgroundColor: '#fff3ea',
+    borderColor: '#c7d2fe',
+    backgroundColor: '#eef2ff',
     borderRadius: 999,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   quickText: {
-    color: Brand.emberDark,
+    color: '#1e40af',
     fontWeight: '700',
-    fontFamily: BrandFonts.body,
   },
 });
