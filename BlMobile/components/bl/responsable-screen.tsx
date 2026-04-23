@@ -160,27 +160,29 @@ export function ResponsableScreen({ token, fullName }: Props) {
               <Text style={styles.empty}>Aucun BL charge</Text>
             )}
 
-            {articles.map((item) => {
-              const isSaved = existingSelectedIdsSet.has(item.IDBL);
-              const isSelected = !!selectedMap[item.IDBL];
-              const isPending = isSelected !== isSaved;
+            <ScrollView style={styles.itemsScroll} showsVerticalScrollIndicator>
+              {articles.map((item) => {
+                const isSaved = existingSelectedIdsSet.has(item.IDBL);
+                const isSelected = !!selectedMap[item.IDBL];
+                const isPending = isSelected !== isSaved;
 
-              return (
-                <Pressable
-                  key={item.IDBL}
-                  style={[styles.item, isSaved && styles.itemSaved, isPending && !isSaved && styles.itemPending]}
-                  onPress={() => toggleItem(item.IDBL)}>
-                  <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>
-                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                  </View>
-                  <View style={styles.itemContent}>
-                    <Text style={styles.itemTitle}>{item.Destinataire || 'Client'}</Text>
-                    <Text style={styles.itemMeta}>#{item.IDBL} • {item.DateBL}</Text>
-                  </View>
-                  {isSaved && <Text style={styles.tag}>OK</Text>}
-                </Pressable>
-              );
-            })}
+                return (
+                  <Pressable
+                    key={item.IDBL}
+                    style={[styles.item, isSaved && styles.itemSaved, isPending && !isSaved && styles.itemPending]}
+                    onPress={() => toggleItem(item.IDBL)}>
+                    <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>
+                      {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <View style={styles.itemContent}>
+                      <Text style={styles.itemTitle}>{item.Destinataire || 'Client'}</Text>
+                      <Text style={styles.itemMeta}>#{item.IDBL} • {item.DateBL}</Text>
+                    </View>
+                    {isSaved && <Text style={styles.tag}>OK</Text>}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
 
           <View style={styles.footer}>
@@ -256,6 +258,7 @@ const styles = StyleSheet.create({
   },
   loading: { padding: 20, alignItems: 'center' },
   empty: { color: Brand.muted, fontSize: 14, textAlign: 'center', padding: 20 },
+  itemsScroll: { maxHeight: 280 },
   item: {
     flexDirection: 'row',
     alignItems: 'center',

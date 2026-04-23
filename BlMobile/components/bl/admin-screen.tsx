@@ -99,28 +99,30 @@ export function AdminScreen({ token, fullName }: Props) {
           <Text style={styles.sectionTitle}>Rapports ({reports.length})</Text>
           {loading && <ActivityIndicator color={Brand.ink} style={styles.loader} />}
           {!loading && reports.length === 0 && <Text style={styles.empty}>Aucun rapport</Text>}
-          {reports.map((report) => (
-            <Pressable key={report.report_id} style={styles.reportCard} onPress={() => openDetail(report.report_id)}>
-              <View style={styles.reportHeader}>
-                <Text style={styles.reportName}>{report.destinataire || 'Client'}</Text>
-                <Text style={styles.reportDate}>
-                  {new Date(report.sent_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-              <Text style={styles.reportBl}>#{report.bl_id} • {report.preparer_name}</Text>
-              <View style={styles.statsRow}>
-                <View style={[styles.stat, { backgroundColor: '#e8f5e9' }]}>
-                  <Text style={[styles.statText, { color: '#2e7d32' }]}>OK {report.summary.available}</Text>
+          <ScrollView style={styles.reportsScroll} showsVerticalScrollIndicator>
+            {reports.map((report) => (
+              <Pressable key={report.report_id} style={styles.reportCard} onPress={() => openDetail(report.report_id)}>
+                <View style={styles.reportHeader}>
+                  <Text style={styles.reportName}>{report.destinataire || 'Client'}</Text>
+                  <Text style={styles.reportDate}>
+                    {new Date(report.sent_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
                 </View>
-                <View style={[styles.stat, { backgroundColor: '#fff3e0' }]}>
-                  <Text style={[styles.statText, { color: '#ef6c00' }]}>Partiel {report.summary.partial}</Text>
+                <Text style={styles.reportBl}>#{report.bl_id} • {report.preparer_name}</Text>
+                <View style={styles.statsRow}>
+                  <View style={[styles.stat, { backgroundColor: '#e8f5e9' }]}>
+                    <Text style={[styles.statText, { color: '#2e7d32' }]}>OK {report.summary.available}</Text>
+                  </View>
+                  <View style={[styles.stat, { backgroundColor: '#fff3e0' }]}>
+                    <Text style={[styles.statText, { color: '#ef6c00' }]}>Partiel {report.summary.partial}</Text>
+                  </View>
+                  <View style={[styles.stat, { backgroundColor: '#ffebee' }]}>
+                    <Text style={[styles.statText, { color: '#c62828' }]}>Rupture {report.summary.not_available}</Text>
+                  </View>
                 </View>
-                <View style={[styles.stat, { backgroundColor: '#ffebee' }]}>
-                  <Text style={[styles.statText, { color: '#c62828' }]}>Rupture {report.summary.not_available}</Text>
-                </View>
-              </View>
-            </Pressable>
-          ))}
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
       </ScrollView>
 
@@ -139,15 +141,20 @@ export function AdminScreen({ token, fullName }: Props) {
                   <View style={styles.tableHead}>
                     <Text style={[styles.headCell, styles.refCol]}>Ref</Text>
                     <Text style={styles.headCell}>Statut</Text>
+                    <Text style={styles.headCell}>Att</Text>
                     <Text style={styles.headCell}>Prep</Text>
+                    <Text style={styles.headCell}>Manque</Text>
                   </View>
                   {detail.items.map((item, idx) => {
                     const colors = statusColors(item.status);
+                    const missing = item.quantity_missing ?? (item.quantity_expected && item.quantity_prepared !== undefined ? Math.max(0, item.quantity_expected - item.quantity_prepared) : 0);
                     return (
                       <View key={`${item.reference}-${idx}`} style={[styles.tableRow, { backgroundColor: colors.bg }]}>
                         <Text style={[styles.cell, styles.refCol]}>{item.reference}</Text>
-                        <Text style={[styles.cell, { color: colors.text }]}>{statusLabel(item.status)}</Text>
+                        <Text style={[styles.cell, { color: colors.text, fontWeight: '600' }]}>{statusLabel(item.status)}</Text>
+                        <Text style={styles.cell}>{item.quantity_expected ?? '-'}</Text>
                         <Text style={styles.cell}>{item.quantity_prepared ?? '-'}</Text>
+                        <Text style={[styles.cell, missing > 0 && styles.missingCell]}>{missing > 0 ? missing : '-'}</Text>
                       </View>
                     );
                   })}
@@ -193,6 +200,7 @@ const styles = StyleSheet.create({
   error: { color: Brand.danger, fontSize: 13, marginBottom: 16 },
   loader: { marginVertical: 20 },
   reportsList: { marginTop: 8 },
+  reportsScroll: { maxHeight: 280 },
   sectionTitle: { fontSize: 14, fontWeight: '600', color: Brand.muted, marginBottom: 12 },
   empty: { color: Brand.muted, textAlign: 'center', padding: 20 },
   reportCard: {
@@ -233,4 +241,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  missingCell: { color: Brand.danger, fontWeight: '700' },
 });

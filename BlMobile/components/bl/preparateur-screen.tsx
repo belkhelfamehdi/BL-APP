@@ -253,17 +253,19 @@ export function PreparateurScreen({ token, fullName }: Props) {
             <Text style={styles.sectionTitle}>BL a preparer ({selectionRows.length})</Text>
             {loadingSelection && <ActivityIndicator color={Brand.ink} style={styles.loader} />}
             {!loadingSelection && selectionRows.length === 0 && <Text style={styles.empty}>Aucun BL</Text>}
-            {selectionRows.map((row) => (
-              <Pressable
-                key={`${row.bl_id}-${row.selected_at}`}
-                style={[styles.blCard, activeBlId === row.bl_id && styles.blCardActive]}
-                onPress={() => openBl(row.bl_id)}>
-                <View>
-                  <Text style={[styles.blName, activeBlId === row.bl_id && styles.blNameActive]}>{row.destinataire}</Text>
-                  <Text style={styles.blId}>#{row.bl_id}</Text>
-                </View>
-              </Pressable>
-            ))}
+            <ScrollView style={styles.blScroll} showsVerticalScrollIndicator>
+              {selectionRows.map((row) => (
+                <Pressable
+                  key={`${row.bl_id}-${row.selected_at}`}
+                  style={[styles.blCard, activeBlId === row.bl_id && styles.blCardActive]}
+                  onPress={() => openBl(row.bl_id)}>
+                  <View>
+                    <Text style={[styles.blName, activeBlId === row.bl_id && styles.blNameActive]}>{row.destinataire}</Text>
+                    <Text style={styles.blId}>#{row.bl_id}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
 
           {activeBlId && (
@@ -287,44 +289,46 @@ export function PreparateurScreen({ token, fullName }: Props) {
 
               {loadingProducts && <ActivityIndicator color={Brand.ink} style={styles.loader} />}
 
-              {!loadingProducts && products.map((item) => {
-                const draft = drafts[item.reference];
-                if (!draft) return null;
-                const colors = statusColors[draft.status];
+              <ScrollView style={styles.productsScroll} showsVerticalScrollIndicator>
+                {!loadingProducts && products.map((item) => {
+                  const draft = drafts[item.reference];
+                  if (!draft) return null;
+                  const colors = statusColors[draft.status];
 
-                return (
-                  <View key={item.reference} style={styles.productCard}>
-                    <View style={styles.productHeader}>
-                      <Text style={styles.productRef}>{item.reference}</Text>
-                      <Text style={styles.productQty}>→ {item.quantityExpected}</Text>
+                  return (
+                    <View key={item.reference} style={styles.productCard}>
+                      <View style={styles.productHeader}>
+                        <Text style={styles.productRef}>{item.reference}</Text>
+                        <Text style={styles.productQty}>→ {item.quantityExpected}</Text>
+                      </View>
+
+                      <View style={styles.statusButtons}>
+                        {(['available', 'partial', 'not_available'] as ProductStatus[]).map((status) => (
+                          <Pressable
+                            key={status}
+                            style={[styles.statusBtn, draft.status === status && { backgroundColor: colors.bg, borderColor: colors.border }]}
+                            onPress={() => setStatus(item.reference, status)}>
+                            <Text style={[styles.statusBtnText, draft.status === status && { color: colors.text }]}>
+                              {status === 'available' ? 'OK' : status === 'partial' ? 'Partiel' : 'Rupture'}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+
+                      {draft.status === 'partial' && (
+                        <TextInput
+                          style={styles.qtyInput}
+                          value={draft.quantityPrepared !== undefined ? String(draft.quantityPrepared) : ''}
+                          onChangeText={(v) => setPreparedQty(item.reference, v)}
+                          keyboardType="numeric"
+                          placeholder="Qte Preparee"
+                          placeholderTextColor={Brand.muted}
+                        />
+                      )}
                     </View>
-
-                    <View style={styles.statusButtons}>
-                      {(['available', 'partial', 'not_available'] as ProductStatus[]).map((status) => (
-                        <Pressable
-                          key={status}
-                          style={[styles.statusBtn, draft.status === status && { backgroundColor: colors.bg, borderColor: colors.border }]}
-                          onPress={() => setStatus(item.reference, status)}>
-                          <Text style={[styles.statusBtnText, draft.status === status && { color: colors.text }]}>
-                            {status === 'available' ? 'OK' : status === 'partial' ? 'Partiel' : 'Rupture'}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    {draft.status === 'partial' && (
-                      <TextInput
-                        style={styles.qtyInput}
-                        value={draft.quantityPrepared !== undefined ? String(draft.quantityPrepared) : ''}
-                        onChangeText={(v) => setPreparedQty(item.reference, v)}
-                        keyboardType="numeric"
-                        placeholder="Qte Preparee"
-                        placeholderTextColor={Brand.muted}
-                      />
-                    )}
-                  </View>
-                );
-              })}
+                  );
+                })}
+              </ScrollView>
 
               <TextInput
                 style={styles.commentInput}
@@ -380,6 +384,7 @@ const styles = StyleSheet.create({
   loader: { marginVertical: 20 },
   empty: { color: Brand.muted, textAlign: 'center', padding: 20 },
   blList: { marginBottom: 20 },
+  blScroll: { maxHeight: 200 },
   sectionTitle: { fontSize: 14, fontWeight: '600', color: Brand.muted, marginBottom: 12 },
   blCard: {
     backgroundColor: '#fafafa',
@@ -392,6 +397,7 @@ const styles = StyleSheet.create({
   blNameActive: { color: '#fff' },
   blId: { fontSize: 12, color: Brand.muted, marginTop: 2 },
   productsSection: { marginTop: 8 },
+  productsScroll: { maxHeight: 320 },
   activeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
   activeTitle: { fontSize: 18, fontWeight: '600', color: Brand.ink },
   activeId: { fontSize: 14, color: Brand.muted },
