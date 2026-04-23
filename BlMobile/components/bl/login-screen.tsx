@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Brand } from '@/constants/brand';
+import { LogoMark } from '@/components/brand/logo-mark';
 
 interface Props {
   loading: boolean;
@@ -44,9 +45,7 @@ export function LoginScreen({ loading, error, onLogin }: Props) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.logoText}>BL</Text>
-            <Text style={styles.title}>Bon de Livraison</Text>
-            <Text style={styles.subtitle}>Preparation quotidienne</Text>
+            <LogoMark size={240} />
           </View>
 
           <View style={styles.form}>
@@ -129,12 +128,6 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 48,
-  },
-  logoText: {
-    fontSize: 48,
-    fontWeight: '200',
-    color: Brand.ember,
-    letterSpacing: 4,
   },
   title: {
     fontSize: 24,
