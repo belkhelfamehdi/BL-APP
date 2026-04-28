@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
@@ -60,6 +61,7 @@ function dedupeSelectionRows(rows: SelectionRow[]): SelectionRow[] {
 
 export function PreparateurScreen({ token, fullName }: Props) {
   const [targetDate, setTargetDate] = useState(todayIso());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectionRows, setSelectionRows] = useState<SelectionRow[]>([]);
   const [activeBlId, setActiveBlId] = useState<number | null>(null);
   const [products, setProducts] = useState<ProductLine[]>([]);
@@ -71,6 +73,14 @@ export function PreparateurScreen({ token, fullName }: Props) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const iso = selectedDate.toISOString().slice(0, 10);
+      setTargetDate(iso);
+    }
+  }, []);
 
   const activeRow = useMemo(
     () => selectionRows.find((row) => row.bl_id === activeBlId) ?? null,
@@ -233,14 +243,19 @@ export function PreparateurScreen({ token, fullName }: Props) {
 
           <View style={styles.dateRow}>
             <Text style={styles.dateLabel}>{new Date(targetDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</Text>
-            <TextInput
-              style={styles.dateInput}
-              value={targetDate}
-              onChangeText={setTargetDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={Brand.muted}
-            />
+            <Pressable style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
+              <Text style={styles.dateInputText}>Changer</Text>
+            </Pressable>
           </View>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={new Date(targetDate)}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleDateChange}
+            />
+          )}
 
           <Pressable style={styles.reloadButton} onPress={loadSelection}>
             <Text style={styles.reloadText}>Actualiser</Text>
@@ -363,13 +378,15 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   dateLabel: { flex: 1, fontSize: 16, fontWeight: '600', color: Brand.ink },
   dateInput: {
-    width: 100,
     backgroundColor: '#f5f5f5',
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 10,
+  },
+  dateInputText: {
     fontSize: 14,
-    textAlign: 'center',
+    color: Brand.ink,
+    fontWeight: '500',
   },
   reloadButton: {
     backgroundColor: '#f5f5f5',

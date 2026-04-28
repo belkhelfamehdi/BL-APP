@@ -2,7 +2,9 @@ import { API_BASE_URL } from '@/services/config';
 import {
   AdminReportDetail,
   AdminReportSummary,
+  Article,
   ArticleBL,
+  ArticleSearchResponse,
   LoginResponse,
   RawBLProductsResponse,
   SelectionResponse,
@@ -131,5 +133,13 @@ export const api = {
 
   getAdminReportDetail(token: string, reportId: number) {
     return request<AdminReportDetail>(`/admin/reports/${reportId}`, { token });
+  },
+
+  searchArticles(query: string) {
+    return request<ArticleSearchResponse>(`/articles/search?q=${encodeURIComponent(query)}`);
+  },
+
+  getArticleByCode(code: string) {
+    return request<Article>(`/articles/${encodeURIComponent(code)}`);
   },
 };

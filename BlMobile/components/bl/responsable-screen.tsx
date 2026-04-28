@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
@@ -29,6 +30,7 @@ function tomorrowIso(): string {
 
 export function ResponsableScreen({ token, fullName }: Props) {
   const [targetDate, setTargetDate] = useState(tomorrowIso());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [articles, setArticles] = useState<ArticleBL[]>([]);
   const [selectedMap, setSelectedMap] = useState<Record<number, boolean>>({});
   const [existingSelections, setExistingSelections] = useState<SelectionRow[]>([]);
@@ -37,6 +39,14 @@ export function ResponsableScreen({ token, fullName }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const iso = selectedDate.toISOString().slice(0, 10);
+      setTargetDate(iso);
+    }
+  }, []);
 
   const existingSelectedIdsSet = useMemo(
     () => new Set(existingSelections.map((row) => row.bl_id)),
@@ -123,14 +133,19 @@ export function ResponsableScreen({ token, fullName }: Props) {
 
           <View style={styles.dateRow}>
             <Text style={styles.dateLabel}>Date</Text>
-            <TextInput
-              style={styles.dateInput}
-              value={targetDate}
-              onChangeText={setTargetDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={Brand.muted}
-            />
+            <Pressable style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
+              <Text style={styles.dateInputText}>Changer</Text>
+            </Pressable>
           </View>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={new Date(targetDate)}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleDateChange}
+            />
+          )}
 
           <View style={styles.actions}>
             <Pressable style={styles.actionButton} onPress={loadArticles}>
@@ -227,12 +242,15 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   dateLabel: { fontSize: 14, fontWeight: '600', color: Brand.ink },
   dateInput: {
-    flex: 1,
     backgroundColor: '#f5f5f5',
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 10,
+  },
+  dateInputText: {
     fontSize: 14,
+    color: Brand.ink,
+    fontWeight: '500',
   },
   actions: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   actionButton: {

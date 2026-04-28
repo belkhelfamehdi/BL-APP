@@ -1076,5 +1076,116 @@ def get_admin_report_detail(
         conn.close()
 
 
+@app.get("/articles/search")
+def search_articles(
+    q: str = Query(min_length=1, description="Reference/code QR ou nom du produit"),
+    debug: bool = Query(default=False, description="Ajoute des infos de debug"),
+):
+    """Recherche un article par code barre (table MULTI_CODE) ou par nom (colonne 'DEF')."""
+    conn = None
+    try:
+        conn = get_hfsql_connection()
+        cursor = conn.cursor()
+
+        search_term = q.strip()
+        search_pattern = f"%{search_term}%"
+
+        cursor.execute(
+            """
+            SELECT DISTINCT a.CODE, a.DEF, a.PRIX_TTC, a.BaseHT 
+            FROM Article a
+            LEFT JOIN MULTI_CODE mc ON a.IDART = mc.IDART
+            WHERE mc.CODE LIKE ? OR a.DEF LIKE ?
+            """,
+            (search_pattern, search_pattern),
+        )
+        rows = cursor.fetchall()
+
+        data = []
+        for row in rows:
+            code_val = row[0] if len(row) > 0 else None
+            def_val = row[1] if len(row) > 1 else None
+            prix_val = row[2] if len(row) > 2 else None
+            baseht_val = row[3] if len(row) > 3 else None
+            data.append({
+                "code": code_val,
+                "designation": def_val,
+                "prix": float(prix_val) if prix_val is not None else None,
+                "base_ht": float(baseht_val) if baseht_val is not None else None,
+            })
+
+        response: dict[str, Any] = {"query": search_term, "count": len(data), "data": data}
+        if debug:
+            response["debug"] = {
+                "search_pattern": search_pattern,
+                "sql": "LEFT JOIN MULTI_CODE instead of INNER JOIN",
+            }
+        return response
+    except HFSQL_ERRORS as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur HFSQL: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur: {exc}") from exc
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.get("/articles/{code}")
+def get_article_by_code(code: str):
+    """Recupere les details d'un article par son code barre exact (table MULTI_CODE)."""
+    conn = None
+    try:
+        conn = get_hfsql_connection()
+        cursor = conn.cursor()
+
+        code_clean = code.strip()
+
+        cursor.execute(
+            "SELECT IDART FROM MULTI_CODE WHERE UPPER(CODE) = UPPER(?)",
+            (code_clean,),
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            raise HTTPException(status_code=404, detail="Article non trouve")
+
+        idart = row[0]
+
+        cursor.execute(
+            "SELECT CODE, DEF, PRIX_TTC, BaseHT FROM Article WHERE IDART = ?",
+            (idart,),
+        )
+        article_row = cursor.fetchone()
+
+        if article_row is None:
+            raise HTTPException(status_code=404, detail="Article non trouve")
+
+        code_val = article_row[0] if len(article_row) > 0 else None
+        def_val = article_row[1] if len(article_row) > 1 else None
+        prix_val = article_row[2] if len(article_row) > 2 else None
+        baseht_val = article_row[3] if len(article_row) > 3 else None
+
+        return {
+            "code": code_clean,
+            "designation": def_val,
+            "prix": float(prix_val) if prix_val is not None else None,
+            "base_ht": float(baseht_val) if baseht_val is not None else None,
+        }
+    except HTTPException:
+        raise
+    except HFSQL_ERRORS as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur HFSQL: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur: {exc}") from exc
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "BL API running"}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)

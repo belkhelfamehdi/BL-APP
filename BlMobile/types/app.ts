@@ -89,6 +89,19 @@ export interface AdminReportDetailItem {
   note?: string;
 }
 
+export interface Article {
+  code: string;
+  designation: string;
+  prix: number | null;
+  base_ht: number | null;
+}
+
+export interface ArticleSearchResponse {
+  query: string;
+  count: number;
+  data: Article[];
+}
+
 export interface AdminReportDetail {
   report_id: number;
   report_date: string;

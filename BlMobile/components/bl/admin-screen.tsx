@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
@@ -38,11 +40,20 @@ function statusColors(status: string): { bg: string; text: string } {
 
 export function AdminScreen({ token, fullName }: Props) {
   const [reportDate, setReportDate] = useState(todayIso());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [reports, setReports] = useState<AdminReportSummary[]>([]);
   const [detail, setDetail] = useState<AdminReportDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const iso = selectedDate.toISOString().slice(0, 10);
+      setReportDate(iso);
+    }
+  }, []);
 
   const loadReports = useCallback(async () => {
     try {
@@ -80,14 +91,19 @@ export function AdminScreen({ token, fullName }: Props) {
 
         <View style={styles.dateRow}>
           <Text style={styles.dateLabel}>{new Date(reportDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</Text>
-          <TextInput
-            style={styles.dateInput}
-            value={reportDate}
-            onChangeText={setReportDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={Brand.muted}
-          />
+          <Pressable style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
+            <Text style={styles.dateInputText}>Changer</Text>
+          </Pressable>
         </View>
+
+        {showDatePicker && (
+          <DateTimePicker
+            value={new Date(reportDate)}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={handleDateChange}
+          />
+        )}
 
         <Pressable style={styles.reloadButton} onPress={loadReports}>
           <Text style={styles.reloadText}>Actualiser</Text>
@@ -181,13 +197,15 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   dateLabel: { flex: 1, fontSize: 16, fontWeight: '600', color: Brand.ink },
   dateInput: {
-    width: 100,
     backgroundColor: '#f5f5f5',
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 10,
+  },
+  dateInputText: {
     fontSize: 14,
-    textAlign: 'center',
+    color: Brand.ink,
+    fontWeight: '500',
   },
   reloadButton: {
     backgroundColor: '#f5f5f5',
