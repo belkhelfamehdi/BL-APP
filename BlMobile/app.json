@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mehdibelkhelfa.BlMobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +23,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mehdibelkhelfa.BlMobile"
     },
     "web": {
       "output": "static",
@@ -44,6 +49,20 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "aa6f9dab-a086-4ec3-a3ed-2b45132bc768"
+      },
+      "EXPO_PUBLIC_API_URL": "https://telia-maddox-vermiform.ngrok-free.dev/",
+      "EXPO_PUBLIC_API_URL_ANDROID": "https://telia-maddox-vermiform.ngrok-free.dev/"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/aa6f9dab-a086-4ec3-a3ed-2b45132bc768"
     }
   }
 }

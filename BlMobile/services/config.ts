@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
-const ANDROID_LOCAL_API = 'http://10.0.2.2:8000';
-const DEFAULT_LOCAL_API = 'http://127.0.0.1:8000';
+const ANDROID_LOCAL_API = process.env.EXPO_PUBLIC_API_URL;
+const DEFAULT_LOCAL_API = process.env.EXPO_PUBLIC_API_URL_ANDROID;
 
 const fallbackApiUrl = Platform.OS === 'android' ? ANDROID_LOCAL_API : DEFAULT_LOCAL_API;
 const envGeneric = process.env.EXPO_PUBLIC_API_URL?.trim();
