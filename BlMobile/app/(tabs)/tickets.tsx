@@ -72,6 +72,8 @@ const labelStyles = StyleSheet.create({
     height: 65,
     backgroundColor: '#ff6600',
     borderBottomRightRadius: 50,
+    borderRightWidth: 2,
+    borderColor: '#000',
   },
   cornerBR: {
     position: 'absolute',
@@ -81,6 +83,8 @@ const labelStyles = StyleSheet.create({
     height: 65,
     backgroundColor: '#ff6600',
     borderTopLeftRadius: 50,
+    borderLeftWidth: 2,
+    borderColor: '#000',
   },
   topSection: {
     padding: 25,
