@@ -149,7 +149,7 @@ export default function TicketsScreen() {
   const [currentPage, setCurrentPage] = useState(1);
   const [generating, setGenerating] = useState(false);
 
-  const labelRef = useRef<ViewShot>(null);
+  const pdfLabelRef = useRef<ViewShot>(null);
   const labelRefs = useRef<Map<string, React.RefObject<ViewShot>>>(new Map());
 
   const loadArticles = useCallback(async (query = '') => {
@@ -330,11 +330,11 @@ ${pageImgs.map(uri => `<img src="${uri}" />`).join('\n')}
   }, [articles, selectedArticles]);
 
   const handlePrintLabel = useCallback(async () => {
-    if (!selectedArticle || !labelRef.current) return;
+    if (!selectedArticle || !pdfLabelRef.current) return;
     try {
       setLoading(true);
       
-      const uri = await labelRef.current.capture?.();
+      const uri = await pdfLabelRef.current.capture?.();
       if (!uri) {
         Alert.alert('Erreur', 'Impossible de capturer l\'étiquette');
         return;
@@ -365,11 +365,11 @@ ${pageImgs.map(uri => `<img src="${uri}" />`).join('\n')}
   }, [selectedArticle]);
 
   const handleShareLabel = useCallback(async () => {
-    if (!selectedArticle || !labelRef.current) return;
+    if (!selectedArticle || !pdfLabelRef.current) return;
     try {
       setLoading(true);
       
-      const uri = await labelRef.current.capture?.();
+      const uri = await pdfLabelRef.current.capture?.();
       if (!uri) {
         Alert.alert('Erreur', 'Impossible de capturer l\'étiquette');
         return;
@@ -563,9 +563,11 @@ ${pageImgs.map(uri => `<img src="${uri}" />`).join('\n')}
             <View style={styles.modalContent}>
               {selectedArticle && (
                 <>
-                  <ViewShot ref={labelRef} options={{ format: 'png', quality: 1 }}>
-                    <LabelView article={selectedArticle} />
-                  </ViewShot>
+                  <View style={styles.previewWrapper}>
+                    <View style={styles.previewScaled}>
+                      <LabelView article={selectedArticle} />
+                    </View>
+                  </View>
 
                   <View style={styles.modalActions}>
                     <Pressable style={styles.printBtn} onPress={handlePrintLabel}>
@@ -584,6 +586,14 @@ ${pageImgs.map(uri => `<img src="${uri}" />`).join('\n')}
             </View>
           </View>
         </Modal>
+
+        {selectedArticle && (
+          <View style={styles.hiddenPdfCapture} pointerEvents="none">
+            <ViewShot ref={pdfLabelRef} options={{ format: 'png', quality: 1 }}>
+              <LabelView article={selectedArticle} />
+            </ViewShot>
+          </View>
+        )}
 
         {generating && selectedArticlesList.length > 0 && (
           <View style={{ position: 'absolute', left: -9999, top: 0, width: 250, flexDirection: 'row', flexWrap: 'wrap' }}>
@@ -667,4 +677,7 @@ const styles = StyleSheet.create({
   checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#ccc', marginRight: 12, justifyContent: 'center', alignItems: 'center' },
   checkboxSelected: { backgroundColor: Brand.ember, borderColor: Brand.ember },
   checkmark: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  previewWrapper: { width: 320, height: 168, alignItems: 'center', justifyContent: 'center' },
+  previewScaled: { transform: [{ scale: 0.8 }] },
+  hiddenPdfCapture: { position: 'absolute', left: -9999, top: 0, width: 400, height: 210, opacity: 0 },
 });
