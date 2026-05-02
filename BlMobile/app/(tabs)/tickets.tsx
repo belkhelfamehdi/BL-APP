@@ -63,6 +63,7 @@ const labelStyles = StyleSheet.create({
     borderColor: '#222',
     borderRadius: 12,
     overflow: 'hidden',
+    justifyContent: 'center',
   },
   cornerTL: {
     position: 'absolute',
