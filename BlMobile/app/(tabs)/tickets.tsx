@@ -43,8 +43,8 @@ const LabelView: React.FC<LabelViewProps> = ({ article }) => {
           <Text style={labelStyles.priceValue}>{prixTtc}€</Text>
         </View>
         <View style={labelStyles.priceCol}>
-          <Text style={labelStyles.priceLabel}>PRIX HT</Text>
-          <Text style={labelStyles.priceValue}>{prixHt}€</Text>
+          <Text style={[labelStyles.priceLabel, labelStyles.priceLabelHt]}>PRIX HT</Text>
+          <Text style={[labelStyles.priceValue, labelStyles.priceValueHt]}>{prixHt}€</Text>
         </View>
       </View>
       <View style={labelStyles.brandSection}>
@@ -89,7 +89,7 @@ const labelStyles = StyleSheet.create({
   },
   topSection: {
     padding: 25,
-    paddingBottom: 10,
+    paddingBottom: 25,
     alignItems: 'center',
   },
   title: {
@@ -111,11 +111,23 @@ const labelStyles = StyleSheet.create({
     fontWeight: '700',
     color: '#222',
   },
+  priceLabelHt: {
+    fontSize: 13,
+    color: '#ff6600',
+    letterSpacing: 0.5,
+  },
   priceValue: {
     fontSize: 22,
     fontWeight: '900',
+    color: '#111',
+    marginTop: 8,
+  },
+  priceValueHt: {
+    fontSize: 34,
+    fontWeight: '900',
     color: '#ff6600',
-    marginTop: 2,
+    letterSpacing: 0.5,
+    marginTop: 4,
   },
   brandSection: {
     position: 'absolute',
