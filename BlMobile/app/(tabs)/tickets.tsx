@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,12 +13,111 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import ViewShot from 'react-native-view-shot';
 
 import { api } from '@/services/api';
 import { Brand } from '@/constants/brand';
 import { Article } from '@/types/app';
+import { LogoMark } from '@/components/brand/logo-mark';
 
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
+
+interface LabelViewProps {
+  article: Article;
+}
+
+const LabelView: React.FC<LabelViewProps> = ({ article }) => {
+  const prixTtc = article.prix !== null ? article.prix.toFixed(2) : 'N/A';
+  const prixHt = article.base_ht !== null ? article.base_ht.toFixed(2) : 'N/A';
+
+  return (
+    <View style={labelStyles.labelContainer}>
+      <View style={labelStyles.cornerTL} />
+      <View style={labelStyles.cornerBR} />
+      <View style={labelStyles.topSection}>
+        <Text style={labelStyles.title} numberOfLines={2}>{article.designation}</Text>
+      </View>
+      <View style={labelStyles.pricesRow}>
+        <View style={labelStyles.priceCol}>
+          <Text style={labelStyles.priceLabel}>PRIX TTC</Text>
+          <Text style={labelStyles.priceValue}>{prixTtc}€</Text>
+        </View>
+        <View style={labelStyles.priceCol}>
+          <Text style={labelStyles.priceLabel}>PRIX HT</Text>
+          <Text style={labelStyles.priceValue}>{prixHt}€</Text>
+        </View>
+      </View>
+      <View style={labelStyles.brandSection}>
+        <LogoMark size={40} />
+      </View>
+    </View>
+  );
+};
+
+const labelStyles = StyleSheet.create({
+  labelContainer: {
+    width: 280,
+    height: 150,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 2,
+    borderColor: '#222',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  cornerTL: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 45,
+    height: 45,
+    backgroundColor: '#ff6600',
+    borderBottomRightRadius: 35,
+  },
+  cornerBR: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 45,
+    height: 45,
+    backgroundColor: '#ff6600',
+    borderTopLeftRadius: 35,
+  },
+  topSection: {
+    padding: 20,
+    paddingBottom: 8,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#111',
+    textAlign: 'center',
+  },
+  pricesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+  },
+  priceCol: {
+    alignItems: 'center',
+  },
+  priceLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#222',
+  },
+  priceValue: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#ff6600',
+    marginTop: 2,
+  },
+  brandSection: {
+    position: 'absolute',
+    bottom: 8,
+    left: 10,
+  },
+});
 
 export default function TicketsScreen() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -31,6 +130,10 @@ export default function TicketsScreen() {
   const [showPreview, setShowPreview] = useState(false);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [generating, setGenerating] = useState(false);
+
+  const labelRef = useRef<ViewShot>(null);
+  const labelRefs = useRef<Map<string, React.RefObject<ViewShot>>>(new Map());
 
   const loadArticles = useCallback(async (query = '') => {
     setLoading(true);
@@ -61,13 +164,13 @@ export default function TicketsScreen() {
     }
   }, []);
 
-  const handleSearch = useCallback(() => {
-    loadArticles(searchQuery);
-  }, [searchQuery, loadArticles]);
-
   React.useEffect(() => {
     loadArticles();
   }, [loadArticles]);
+
+  const handleSearch = useCallback(() => {
+    loadArticles(searchQuery);
+  }, [searchQuery, loadArticles]);
 
   const handleSelectArticle = useCallback((article: Article) => {
     setSelectedArticle(article);
@@ -106,154 +209,15 @@ export default function TicketsScreen() {
     setSelectedArticles(new Set());
   }, []);
 
-  const generateLabelHtml = (article: Article): string => {
-    const prixTtc = article.prix !== null ? article.prix.toFixed(2) : 'N/A';
-    const prixHt = article.base_ht !== null ? article.base_ht.toFixed(2) : 'N/A';
+  const generatePdfFromImages = async (imageUris: string[]): Promise<string> => {
+    const LABELS_PER_PAGE = 12;
+    const pages: string[][] = [];
     
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Arial, sans-serif; padding: 10px; background: #fff; }
-.label { 
-  position: relative;
-  width: 300px;
-  height: 160px;
-  margin: 0 auto;
-  background: #f5f5f5;
-  border: 2px solid #222;
-  border-radius: 12px;
-  overflow: hidden;
-}
-.corner-tl {
-  position: absolute;
-  top: 0; left: 0;
-  width: 50px; height: 50px;
-  background: #ff6600;
-  border-bottom-right-radius: 40px;
-}
-.corner-br {
-  position: absolute;
-  bottom: 0; right: 0;
-  width: 50px; height: 50px;
-  background: #ff6600;
-  border-top-left-radius: 40px;
-}
-.top-section {
-  padding: 25px 15px 12px;
-  text-align: center;
-}
-.title {
-  font-size: 14px;
-  font-weight: 900;
-  color: #111;
-  line-height: 1.2;
-}
-.prices-section {
-  display: flex;
-  justify-content: space-around;
-  padding: 10px 20px;
-}
-.price-col {
-  text-align: center;
-}
-.price-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: #222;
-  text-transform: uppercase;
-}
-.price-value {
-  font-size: 20px;
-  font-weight: 900;
-  color: #ff6600;
-  margin-top: 2px;
-}
-.bottom-section {
-  position: absolute;
-  bottom: 8px;
-  left: 12px;
-}
-.brand-badge {
-  display: inline-block;
-  background: #222;
-  border-radius: 6px;
-  padding: 4px 10px;
-}
-.brand-name {
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-}
-.brand-sub {
-  color: #aaa;
-  font-size: 7px;
-}
-</style>
-</head>
-<body>
-<div class="label">
-<div class="corner-tl"></div>
-<div class="corner-br"></div>
-<div class="top-section">
-<div class="title">${article.designation}</div>
-</div>
-<div class="prices-section">
-<div class="price-col">
-<div class="price-label">Prix TTC</div>
-<div class="price-value">${prixTtc}€</div>
-</div>
-<div class="price-col">
-<div class="price-label">Prix HT</div>
-<div class="price-value">${prixHt}€</div>
-</div>
-</div>
-<div class="bottom-section">
-<div class="brand-badge">
-<div class="brand-name">Distriresto</div>
-<div class="brand-sub">Fast & Good Food</div>
-</div>
-</div>
-</div>
-</body>
-</html>
-    `;
-  };
-
-  const generateMultipleLabelsHtml = (selectedArticlesList: Article[]): string => {
-    const labelsHtml = selectedArticlesList.map((article) => {
-      const prixTtc = article.prix !== null ? article.prix.toFixed(2) : 'N/A';
-      const prixHt = article.base_ht !== null ? article.base_ht.toFixed(2) : 'N/A';
-      return `
-<div class="label">
-  <div class="corner-tl"></div>
-  <div class="corner-br"></div>
-  <div class="top-section">
-    <div class="title">${article.designation}</div>
-  </div>
-  <div class="prices-section">
-    <div class="price-col">
-      <div class="price-label">Prix TTC</div>
-      <div class="price-value">${prixTtc}€</div>
-    </div>
-    <div class="price-col">
-      <div class="price-label">Prix HT</div>
-      <div class="price-value">${prixHt}€</div>
-    </div>
-  </div>
-  <div class="bottom-section">
-    <div class="brand-badge">
-      <div class="brand-name">Distriresto</div>
-      <div class="brand-sub">Fast & Good Food</div>
-    </div>
-  </div>
-</div>`;
-    }).join('');
-
-    return `
+    for (let i = 0; i < imageUris.length; i += LABELS_PER_PAGE) {
+      pages.push(imageUris.slice(i, i + LABELS_PER_PAGE));
+    }
+    
+    const html = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -261,58 +225,34 @@ body { font-family: Arial, sans-serif; padding: 10px; background: #fff; }
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: Arial, sans-serif; background: #fff; }
-.label-page { 
+.page { 
   page-break-after: always; 
   display: flex; 
   flex-wrap: wrap; 
   justify-content: center; 
   align-content: flex-start;
-  gap: 15px;
-  padding: 20px;
-  min-height: 100vh;
+  gap: 10px;
+  padding: 15px;
 }
-.label-page:last-child { page-break-after: auto; }
-.label { 
-  position: relative;
-  width: 250px;
-  height: 130px;
-  background: #f5f5f5;
-  border: 2px solid #222;
-  border-radius: 10px;
-  overflow: hidden;
+.page:last-child { page-break-after: avoid; }
+img { 
+  width: 180px; 
+  height: 97px; 
+  object-fit: contain; 
 }
-.corner-tl {
-  position: absolute;
-  top: 0; left: 0;
-  width: 40px; height: 40px;
-  background: #ff6600;
-  border-bottom-right-radius: 30px;
-}
-.corner-br {
-  position: absolute;
-  bottom: 0; right: 0;
-  width: 40px; height: 40px;
-  background: #ff6600;
-  border-top-left-radius: 30px;
-}
-.top-section { padding: 18px 12px 8px; text-align: center; }
-.title { font-size: 11px; font-weight: 900; color: #111; line-height: 1.2; }
-.prices-section { display: flex; justify-content: space-around; padding: 6px 14px; }
-.price-col { text-align: center; }
-.price-label { font-size: 9px; font-weight: 700; color: #222; text-transform: uppercase; }
-.price-value { font-size: 16px; font-weight: 900; color: #ff6600; margin-top: 2px; }
-.bottom-section { position: absolute; bottom: 5px; left: 8px; }
-.brand-badge { display: inline-block; background: #222; border-radius: 4px; padding: 2px 6px; }
-.brand-name { color: #fff; font-size: 8px; font-weight: 700; }
-.brand-sub { color: #aaa; font-size: 5px; }
 </style>
 </head>
 <body>
-<div class="label-page">
-${labelsHtml}
+${pages.map(pageImgs => `
+<div class="page">
+${pageImgs.map(uri => `<img src="${uri}" />`).join('\n')}
 </div>
+`).join('\n')}
 </body>
 </html>`;
+
+    const result = await Print.printToFileAsync({ html });
+    return result?.uri || '';
   };
 
   const handlePrintAllLabels = useCallback(async () => {
@@ -322,60 +262,76 @@ ${labelsHtml}
       return;
     }
     try {
-      setLoading(true);
-      const html = generateMultipleLabelsHtml(selectedArticlesList);
-      const result = await Print.printToFileAsync({ html });
-      const uri = result?.uri;
-      if (!uri) {
-        Alert.alert('Erreur', 'PDF non généré');
-        return;
+      setGenerating(true);
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const imageUris: string[] = [];
+      
+      for (const article of selectedArticlesList) {
+        let ref = labelRefs.current.get(article.code);
+        if (!ref) {
+          ref = React.createRef();
+          labelRefs.current.set(article.code, ref);
+        }
+        
+        try {
+          const uri = await ref.current?.capture?.();
+          if (uri) {
+            imageUris.push(uri);
+          }
+        } catch (e) {
+          console.warn('Capture failed for', article.code, e);
+        }
       }
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: `${selectedArticlesList.length} étiquettes`,
-          UTI: 'com.adobe.pdf',
-        });
+
+      if (imageUris.length > 0) {
+        const pdfUri = await generatePdfFromImages(imageUris);
+        if (pdfUri) {
+          const canShare = await Sharing.isAvailableAsync();
+          if (canShare) {
+            await Sharing.shareAsync(pdfUri, {
+              mimeType: 'application/pdf',
+              dialogTitle: `${selectedArticlesList.length} étiquettes`,
+              UTI: 'com.adobe.pdf',
+            });
+          } else {
+            Alert.alert('OK', 'PDF créé');
+          }
+        } else {
+          Alert.alert('Erreur', 'PDF non généré');
+        }
       } else {
-        Alert.alert('OK', 'PDF créé');
+        Alert.alert('Erreur', 'Aucune étiquette capturée');
       }
     } catch (e: any) {
       const errMsg = e?.message || e?.toString() || 'Erreur';
       Alert.alert('Erreur', errMsg);
     } finally {
-      setLoading(false);
+      setGenerating(false);
     }
   }, [articles, selectedArticles]);
 
-  const handlePrintPreview = useCallback(async () => {
-    if (!selectedArticle) return;
-    try {
-      const html = generateLabelHtml(selectedArticle);
-      await Print.printAsync({ html });
-    } catch (e: any) {
-      const errMsg = e?.message || e?.toString() || 'Erreur inconnue';
-      Alert.alert('Erreur', 'Prévisualisation: ' + errMsg);
-    }
-  }, [selectedArticle]);
-
   const handlePrintLabel = useCallback(async () => {
-    if (!selectedArticle) return;
+    if (!selectedArticle || !labelRef.current) return;
     try {
       setLoading(true);
-      const html = generateLabelHtml(selectedArticle);
       
-      const result = await Print.printToFileAsync({ html });
-      const uri = result?.uri;
-      
+      const uri = await labelRef.current.capture?.();
       if (!uri) {
+        Alert.alert('Erreur', 'Impossible de capturer l\'étiquette');
+        return;
+      }
+      
+      const pdfUri = await generatePdfFromImages([uri]);
+      if (!pdfUri) {
         Alert.alert('Erreur', 'PDF non généré');
         return;
       }
       
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(uri, {
+        await Sharing.shareAsync(pdfUri, {
           mimeType: 'application/pdf',
           dialogTitle: 'Étiquette - ' + selectedArticle.code,
           UTI: 'com.adobe.pdf',
@@ -392,14 +348,24 @@ ${labelsHtml}
   }, [selectedArticle]);
 
   const handleShareLabel = useCallback(async () => {
-    if (!selectedArticle) return;
+    if (!selectedArticle || !labelRef.current) return;
     try {
       setLoading(true);
-      const html = generateLabelHtml(selectedArticle);
-      const { uri } = await Print.printToFileAsync({ html });
+      
+      const uri = await labelRef.current.capture?.();
+      if (!uri) {
+        Alert.alert('Erreur', 'Impossible de capturer l\'étiquette');
+        return;
+      }
+      
+      const pdfUri = await generatePdfFromImages([uri]);
+      if (!pdfUri) {
+        Alert.alert('Erreur', 'PDF non généré');
+        return;
+      }
       
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
+        await Sharing.shareAsync(pdfUri, {
           mimeType: 'application/pdf',
           dialogTitle: 'Partager étiquette prix',
           UTI: 'com.adobe.pdf',
@@ -407,8 +373,8 @@ ${labelsHtml}
       } else {
         Alert.alert('Erreur', 'Partage non disponible');
       }
-    } catch (_e) {
-      Alert.alert('Erreur', 'Impossible de generate the label');
+    } catch (e: any) {
+      Alert.alert('Erreur', 'Impossible de générer l\'étiquette');
     } finally {
       setLoading(false);
     }
@@ -501,6 +467,8 @@ ${labelsHtml}
     );
   };
 
+  const selectedArticlesList = articles.filter((a) => selectedArticles.has(a.code));
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.container}>
@@ -519,7 +487,7 @@ ${labelsHtml}
           </View>
         )}
         
-        {loading && <ActivityIndicator color={Brand.ember} style={styles.loader} size="large" />}
+        {(loading || generating) && <ActivityIndicator color={Brand.ember} style={styles.loader} size="large" />}
 
         <View style={styles.searchRow}>
           <TextInput
@@ -578,38 +546,11 @@ ${labelsHtml}
             <View style={styles.modalContent}>
               {selectedArticle && (
                 <>
-                  <View style={styles.labelPreview}>
-                    <View style={styles.labelCornerTL} />
-                    <View style={styles.labelCornerBR} />
-                    <View style={styles.labelTopSection}>
-                      <Text style={styles.labelTitle}>{selectedArticle.designation}</Text>
-                    </View>
-                    <View style={styles.labelPricesRow}>
-                      <View style={styles.labelPriceCol}>
-                        <Text style={styles.labelPriceLabel}>PRIX TTC</Text>
-                        <Text style={styles.labelPriceValue}>
-                          {selectedArticle.prix?.toFixed(2) ?? 'N/A'}€
-                        </Text>
-                      </View>
-                      <View style={styles.labelPriceCol}>
-                        <Text style={styles.labelPriceLabel}>PRIX HT</Text>
-                        <Text style={styles.labelPriceValue}>
-                          {selectedArticle.base_ht?.toFixed(2) ?? 'N/A'}€
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.labelBrand}>
-                      <View style={styles.brandBadge}>
-                        <Text style={styles.brandName}>Distriresto</Text>
-                        <Text style={styles.brandSub}>Fast & Good Food</Text>
-                      </View>
-                    </View>
-                  </View>
+                  <ViewShot ref={labelRef} options={{ format: 'png', quality: 1 }}>
+                    <LabelView article={selectedArticle} />
+                  </ViewShot>
 
                   <View style={styles.modalActions}>
-                    <Pressable style={styles.previewBtn} onPress={handlePrintPreview}>
-                      <Text style={styles.previewBtnText}>Aperçu</Text>
-                    </Pressable>
                     <Pressable style={styles.printBtn} onPress={handlePrintLabel}>
                       <Text style={styles.printBtnText}>Imprimer</Text>
                     </Pressable>
@@ -626,6 +567,25 @@ ${labelsHtml}
             </View>
           </View>
         </Modal>
+
+        {generating && selectedArticlesList.length > 0 && (
+          <View style={{ position: 'absolute', left: -9999, top: 0, flexDirection: 'row', flexWrap: 'wrap', width: 600 }}>
+            {selectedArticlesList.map((article) => {
+              let ref = labelRefs.current.get(article.code);
+              if (!ref) {
+                ref = React.createRef();
+                labelRefs.current.set(article.code, ref);
+              }
+              return (
+                <View key={article.code} style={{ margin: 2 }}>
+                  <ViewShot ref={ref} options={{ format: 'png', quality: 1 }}>
+                    <LabelView article={article} />
+                  </ViewShot>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -656,86 +616,13 @@ const styles = StyleSheet.create({
   prixBadge: { backgroundColor: Brand.ember, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   prixText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#fff', borderRadius: 20, padding: 20 },
-  labelPreview: { 
-    position: 'relative',
-    width: 280,
-    height: 150,
-    backgroundColor: '#f5f5f5',
-    borderWidth: 2,
-    borderColor: '#222',
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 20,
-  },
-  labelCornerTL: {
-    position: 'absolute',
-    top: 0, left: 0,
-    width: 45, height: 45,
-    backgroundColor: '#ff6600',
-    borderBottomRightRadius: 35,
-  },
-  labelCornerBR: {
-    position: 'absolute',
-    bottom: 0, right: 0,
-    width: 45, height: 45,
-    backgroundColor: '#ff6600',
-    borderTopLeftRadius: 35,
-  },
-  labelTopSection: {
-    padding: 22, paddingBottom: 10,
-    alignItems: 'center',
-  },
-  labelTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#111',
-    textAlign: 'center',
-  },
-  labelPricesRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-  labelPriceCol: { alignItems: 'center' },
-  labelPriceLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#222',
-  },
-  labelPriceValue: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#ff6600',
-    marginTop: 2,
-  },
-  labelBrand: {
-    position: 'absolute',
-    bottom: 8, left: 12,
-  },
-  brandBadge: {
-    backgroundColor: '#222',
-    borderRadius: 6,
-    paddingHorizontal: 10, paddingVertical: 4,
-  },
-  brandName: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  brandSub: {
-    color: '#aaa',
-    fontSize: 6,
-  },
-  modalActions: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  previewBtn: { flex: 1, backgroundColor: '#f0f0f0', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  previewBtnText: { color: Brand.ink, fontSize: 15, fontWeight: '600' },
+  modalContent: { backgroundColor: '#fff', borderRadius: 20, padding: 20, alignItems: 'center' },
+  modalActions: { flexDirection: 'row', gap: 10, marginBottom: 12, marginTop: 16 },
   printBtn: { flex: 1, backgroundColor: Brand.ember, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   printBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   shareBtn: { flex: 1, backgroundColor: Brand.ink, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   shareBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  closeBtn: { backgroundColor: '#f0f0f0', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  closeBtn: { backgroundColor: '#f0f0f0', borderRadius: 12, paddingVertical: 14, alignItems: 'center', width: '100%' },
   closeBtnText: { color: Brand.muted, fontSize: 15, fontWeight: '600' },
   pageSelectorContainer: { paddingVertical: 16, alignItems: 'center' },
   perPageSelector: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
