@@ -48,7 +48,7 @@ const LabelView: React.FC<LabelViewProps> = ({ article }) => {
         </View>
       </View>
       <View style={labelStyles.brandSection}>
-        <LogoMark size={40} />
+        <LogoMark size={35} />
       </View>
     </View>
   );
@@ -56,8 +56,8 @@ const LabelView: React.FC<LabelViewProps> = ({ article }) => {
 
 const labelStyles = StyleSheet.create({
   labelContainer: {
-    width: 280,
-    height: 150,
+    width: 240,
+    height: 130,
     backgroundColor: '#f5f5f5',
     borderWidth: 2,
     borderColor: '#222',
@@ -68,27 +68,27 @@ const labelStyles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    width: 45,
-    height: 45,
+    width: 40,
+    height: 40,
     backgroundColor: '#ff6600',
-    borderBottomRightRadius: 35,
+    borderBottomRightRadius: 30,
   },
   cornerBR: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 45,
-    height: 45,
+    width: 40,
+    height: 40,
     backgroundColor: '#ff6600',
-    borderTopLeftRadius: 35,
+    borderTopLeftRadius: 30,
   },
   topSection: {
-    padding: 20,
-    paddingBottom: 8,
+    padding: 15,
+    paddingBottom: 6,
     alignItems: 'center',
   },
   title: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '900',
     color: '#111',
     textAlign: 'center',
@@ -96,26 +96,26 @@ const labelStyles = StyleSheet.create({
   pricesRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
   },
   priceCol: {
     alignItems: 'center',
   },
   priceLabel: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: '700',
     color: '#222',
   },
   priceValue: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '900',
     color: '#ff6600',
     marginTop: 2,
   },
   brandSection: {
     position: 'absolute',
-    bottom: 8,
-    left: 10,
+    bottom: 6,
+    left: 8,
   },
 });
 
@@ -210,7 +210,7 @@ export default function TicketsScreen() {
   }, []);
 
   const generatePdfFromImages = async (imageUris: string[]): Promise<string> => {
-    const LABELS_PER_PAGE = 12;
+    const LABELS_PER_PAGE = 8;
     const pages: string[][] = [];
     
     for (let i = 0; i < imageUris.length; i += LABELS_PER_PAGE) {
@@ -236,8 +236,8 @@ body { font-family: Arial, sans-serif; background: #fff; }
 }
 .page:last-child { page-break-after: avoid; }
 img { 
-  width: 180px; 
-  height: 97px; 
+  width: 240px; 
+  height: 130px; 
   object-fit: contain; 
 }
 </style>
@@ -264,7 +264,7 @@ ${pageImgs.map(uri => `<img src="${uri}" />`).join('\n')}
     try {
       setGenerating(true);
       
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
       const imageUris: string[] = [];
       
@@ -569,7 +569,7 @@ ${pageImgs.map(uri => `<img src="${uri}" />`).join('\n')}
         </Modal>
 
         {generating && selectedArticlesList.length > 0 && (
-          <View style={{ position: 'absolute', left: -9999, top: 0, flexDirection: 'row', flexWrap: 'wrap', width: 600 }}>
+          <View style={{ position: 'absolute', left: -9999, top: 0, width: 250, flexDirection: 'row', flexWrap: 'wrap' }}>
             {selectedArticlesList.map((article) => {
               let ref = labelRefs.current.get(article.code);
               if (!ref) {
