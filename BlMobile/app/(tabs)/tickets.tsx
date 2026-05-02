@@ -48,7 +48,7 @@ const LabelView: React.FC<LabelViewProps> = ({ article }) => {
         </View>
       </View>
       <View style={labelStyles.brandSection}>
-        <LogoMark size={35} />
+        <LogoMark size={100} />
       </View>
     </View>
   );
@@ -56,8 +56,8 @@ const LabelView: React.FC<LabelViewProps> = ({ article }) => {
 
 const labelStyles = StyleSheet.create({
   labelContainer: {
-    width: 240,
-    height: 130,
+    width: 400,
+    height: 210,
     backgroundColor: '#f5f5f5',
     borderWidth: 2,
     borderColor: '#222',
@@ -68,27 +68,27 @@ const labelStyles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    width: 40,
-    height: 40,
+    width: 65,
+    height: 65,
     backgroundColor: '#ff6600',
-    borderBottomRightRadius: 30,
+    borderBottomRightRadius: 50,
   },
   cornerBR: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 40,
-    height: 40,
+    width: 65,
+    height: 65,
     backgroundColor: '#ff6600',
-    borderTopLeftRadius: 30,
+    borderTopLeftRadius: 50,
   },
   topSection: {
-    padding: 15,
-    paddingBottom: 6,
+    padding: 25,
+    paddingBottom: 10,
     alignItems: 'center',
   },
   title: {
-    fontSize: 10,
+    fontSize: 16,
     fontWeight: '900',
     color: '#111',
     textAlign: 'center',
@@ -96,26 +96,26 @@ const labelStyles = StyleSheet.create({
   pricesRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 15,
+    paddingHorizontal: 25,
   },
   priceCol: {
     alignItems: 'center',
   },
   priceLabel: {
-    fontSize: 7,
+    fontSize: 12,
     fontWeight: '700',
     color: '#222',
   },
   priceValue: {
-    fontSize: 12,
+    fontSize: 22,
     fontWeight: '900',
     color: '#ff6600',
     marginTop: 2,
   },
   brandSection: {
     position: 'absolute',
-    bottom: 6,
-    left: 8,
+    bottom: 10,
+    left: 12,
   },
 });
 
@@ -210,7 +210,7 @@ export default function TicketsScreen() {
   }, []);
 
   const generatePdfFromImages = async (imageUris: string[]): Promise<string> => {
-    const LABELS_PER_PAGE = 8;
+    const LABELS_PER_PAGE = 4;
     const pages: string[][] = [];
     
     for (let i = 0; i < imageUris.length; i += LABELS_PER_PAGE) {
@@ -231,13 +231,13 @@ body { font-family: Arial, sans-serif; background: #fff; }
   flex-wrap: wrap; 
   justify-content: center; 
   align-content: flex-start;
-  gap: 10px;
-  padding: 15px;
+  gap: 20px;
+  padding: 30px;
 }
 .page:last-child { page-break-after: avoid; }
 img { 
-  width: 240px; 
-  height: 130px; 
+  width: 400px; 
+  height: 210px; 
   object-fit: contain; 
 }
 </style>
