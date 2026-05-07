@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
+  FlatList,
+  Modal,
   Platform,
   Pressable,
-  ScrollView,
+  RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -20,6 +20,11 @@ import { ArticleBL, SelectionRow } from '@/types/app';
 interface Props {
   token: string;
   fullName: string;
+}
+
+function parseDateLocal(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
 }
 
 function tomorrowIso(): string {
@@ -35,16 +40,14 @@ export function ResponsableScreen({ token, fullName }: Props) {
   const [selectedMap, setSelectedMap] = useState<Record<number, boolean>>({});
   const [existingSelections, setExistingSelections] = useState<SelectionRow[]>([]);
   const [loadingArticles, setLoadingArticles] = useState(false);
-  const [, setLoadingSelection] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
+    if (Platform.OS === 'android') setShowDatePicker(false);
     if (selectedDate) {
-      const iso = selectedDate.toISOString().slice(0, 10);
-      setTargetDate(iso);
+      setTargetDate(selectedDate.toISOString().slice(0, 10));
     }
   }, []);
 
@@ -57,8 +60,6 @@ export function ResponsableScreen({ token, fullName }: Props) {
     () => Object.entries(selectedMap).filter(([, v]) => v).map(([k]) => Number(k)),
     [selectedMap]
   );
-
-  const selectedCount = selectedIds.length;
 
   const hasPendingChanges = useMemo(() => {
     if (selectedIds.length !== existingSelections.length) return true;
@@ -81,19 +82,14 @@ export function ResponsableScreen({ token, fullName }: Props) {
 
   const loadSelections = useCallback(async () => {
     try {
-      setLoadingSelection(true);
       setError(null);
       const res = await api.listSelections(token, targetDate);
       setExistingSelections(res.data);
       const nextSelected: Record<number, boolean> = {};
-      for (const row of res.data) {
-        nextSelected[row.bl_id] = true;
-      }
+      for (const row of res.data) nextSelected[row.bl_id] = true;
       setSelectedMap(nextSelected);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur chargement');
-    } finally {
-      setLoadingSelection(false);
     }
   }, [targetDate, token]);
 
@@ -107,7 +103,11 @@ export function ResponsableScreen({ token, fullName }: Props) {
       setError(null);
       setSuccess(null);
       await api.createSelections(token, targetDate, selectedIds);
-      setSuccess(selectedCount === 0 ? 'Selection vide' : `${selectedCount} BL enregistres`);
+      setSuccess(
+        selectedIds.length === 0
+          ? 'Sélection vidée'
+          : `${selectedIds.length} BL enregistré${selectedIds.length > 1 ? 's' : ''}`
+      );
       await loadSelections();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
@@ -117,232 +117,392 @@ export function ResponsableScreen({ token, fullName }: Props) {
   };
 
   const toggleItem = (id: number) => {
+    setSuccess(null);
     setSelectedMap((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const renderBLItem = ({ item }: { item: ArticleBL }) => {
+    const isSaved = existingSelectedIdsSet.has(item.IDBL);
+    const isSelected = !!selectedMap[item.IDBL];
+    const isPending = isSelected !== isSaved;
+
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          styles.blCard,
+          isSelected && styles.blCardSelected,
+          pressed && { opacity: 0.85 },
+        ]}
+        onPress={() => toggleItem(item.IDBL)}>
+        <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>
+          {isSelected && <Text style={styles.checkmark}>✓</Text>}
+        </View>
+        <View style={styles.blInfo}>
+          <Text style={styles.blName}>{item.Destinataire || 'Client'}</Text>
+          <Text style={styles.blMeta}>
+            #{item.IDBL}
+            {item.DateBL
+              ? ` • ${parseDateLocal(item.DateBL).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
+              : ''}
+            {item.references_count ? ` • ${item.references_count} art.` : ''}
+          </Text>
+        </View>
+        {isSaved && !isPending && (
+          <View style={styles.tagSaved}>
+            <Text style={styles.tagSavedText}>Enregistré</Text>
+          </View>
+        )}
+        {isPending && isSelected && (
+          <View style={styles.tagPending}>
+            <Text style={styles.tagPendingText}>À ajouter</Text>
+          </View>
+        )}
+        {isPending && !isSelected && (
+          <View style={styles.tagRemove}>
+            <Text style={styles.tagRemoveText}>À retirer</Text>
+          </View>
+        )}
+      </Pressable>
+    );
+  };
+
+  const displayDate = parseDateLocal(targetDate).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+
+  const renderHeader = () => (
+    <View style={styles.listHeader}>
+      <View style={styles.dateSection}>
+        <View style={styles.dateLabelRow}>
+          <Text style={styles.dateLabelText}>Date de préparation</Text>
+        </View>
+        <View style={styles.dateRow}>
+          <Text style={styles.dateDisplay}>{displayDate}</Text>
+          <Pressable
+            style={({ pressed }) => [styles.changeDateBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => setShowDatePicker(true)}>
+            <Text style={styles.changeDateText}>Modifier</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <Pressable
+        style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.8 }]}
+        onPress={() => { void loadArticles(); void loadSelections(); }}>
+        <Text style={styles.refreshText}>Actualiser les BL</Text>
+      </Pressable>
+
+      {error ? (
+        <View style={styles.alertBox}>
+          <Text style={styles.alertText}>{error}</Text>
+        </View>
+      ) : null}
+
+      {success ? (
+        <View style={styles.successBox}>
+          <Text style={styles.successText}>{success}</Text>
+        </View>
+      ) : null}
+
+      {loadingArticles && (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Brand.ember} size="small" />
+          <Text style={styles.loadingText}>Chargement des BL…</Text>
+        </View>
+      )}
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>BL disponibles</Text>
+        <View style={styles.countBadge}>
+          <Text style={styles.countBadgeText}>{articles.length}</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderEmpty = () => {
+    if (loadingArticles) return null;
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyText}>Aucun BL disponible</Text>
+        <Text style={styles.emptySubText}>Les bons de livraison des 2 derniers jours apparaîtront ici</Text>
+      </View>
+    );
+  };
+
+  const renderFooter = () => {
+    if (existingSelections.length === 0) return <View style={styles.listFooterSpace} />;
+    return (
+      <View style={styles.historySection}>
+        <Text style={styles.historyTitle}>
+          Sélection enregistrée — {parseDateLocal(targetDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
+        </Text>
+        {existingSelections.map((row) => (
+          <View key={`${row.bl_id}-${row.selected_at}`} style={styles.historyRow}>
+            <Text style={styles.historyId}>#{row.bl_id}</Text>
+            <Text style={styles.historyDest} numberOfLines={1}>{row.destinataire || '—'}</Text>
+            <Text style={styles.historySel}>par {row.selector_name}</Text>
+          </View>
+        ))}
+        <View style={styles.listFooterSpace} />
+      </View>
+    );
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Preparation</Text>
-            <Text style={styles.headerSubtitle}>
-              {new Date(targetDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </Text>
-          </View>
+      <FlatList
+        data={articles}
+        renderItem={renderBLItem}
+        keyExtractor={(item) => String(item.IDBL)}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        ListFooterComponent={renderFooter}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loadingArticles}
+            onRefresh={() => { void loadArticles(); void loadSelections(); }}
+            tintColor={Brand.ember}
+            colors={[Brand.ember]}
+          />
+        }
+      />
 
-          <View style={styles.dateRow}>
-            <Text style={styles.dateLabel}>Date</Text>
-            <Pressable style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
-              <Text style={styles.dateInputText}>Changer</Text>
-            </Pressable>
-          </View>
+      <View style={styles.stickyFooter}>
+        <View style={styles.footerLeft}>
+          <Text style={styles.footerCount}>{selectedIds.length}</Text>
+          <Text style={styles.footerLabel}>BL sélectionné{selectedIds.length > 1 ? 's' : ''}</Text>
+        </View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.saveBtn,
+            (!hasPendingChanges || saving) && styles.saveBtnDisabled,
+            pressed && hasPendingChanges && { opacity: 0.85 },
+          ]}
+          onPress={saveSelection}
+          disabled={!hasPendingChanges || saving}>
+          <Text style={styles.saveBtnText}>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </Text>
+        </Pressable>
+      </View>
 
-          {showDatePicker && (
-            <DateTimePicker
-              value={new Date(targetDate)}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleDateChange}
-            />
-          )}
-
-          <View style={styles.actions}>
-            <Pressable style={styles.actionButton} onPress={loadArticles}>
-              <Text style={styles.actionText}>Charger BL</Text>
-            </Pressable>
-            <Pressable style={styles.actionButton} onPress={loadSelections}>
-              <Text style={styles.actionText}>Actualiser</Text>
-            </Pressable>
-          </View>
-
-          {error && <Text style={styles.error}>{error}</Text>}
-          {success && <Text style={styles.success}>{success}</Text>}
-
-          <View style={styles.listSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>BL disponibles</Text>
-              <Text style={styles.sectionCount}>{articles.length}</Text>
-            </View>
-
-            {loadingArticles && (
-              <View style={styles.loading}>
-                <ActivityIndicator color={Brand.ink} />
+      {Platform.OS === 'ios' ? (
+        <Modal
+          visible={showDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDatePicker(false)}>
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerSheet}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>Date de préparation</Text>
+                <Pressable
+                  style={({ pressed }) => [styles.pickerDoneBtn, pressed && { opacity: 0.7 }]}
+                  onPress={() => setShowDatePicker(false)}>
+                  <Text style={styles.pickerDoneText}>Confirmer</Text>
+                </Pressable>
               </View>
-            )}
-
-            {!loadingArticles && articles.length === 0 && (
-              <Text style={styles.empty}>Aucun BL charge</Text>
-            )}
-
-            <ScrollView style={styles.itemsScroll} showsVerticalScrollIndicator>
-              {articles.map((item) => {
-                const isSaved = existingSelectedIdsSet.has(item.IDBL);
-                const isSelected = !!selectedMap[item.IDBL];
-                const isPending = isSelected !== isSaved;
-
-                return (
-                  <Pressable
-                    key={item.IDBL}
-                    style={[styles.item, isSaved && styles.itemSaved, isPending && !isSaved && styles.itemPending]}
-                    onPress={() => toggleItem(item.IDBL)}>
-                    <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>
-                      {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                    <View style={styles.itemContent}>
-                      <Text style={styles.itemTitle}>{item.Destinataire || 'Client'}</Text>
-                      <Text style={styles.itemMeta}>#{item.IDBL} • {item.DateBL}</Text>
-                    </View>
-                    {isSaved && <Text style={styles.tag}>OK</Text>}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-
-          <View style={styles.footer}>
-            <View style={styles.footerInfo}>
-              <Text style={styles.footerCount}>{selectedCount}</Text>
-              <Text style={styles.footerLabel}>BL selectionnes</Text>
+              <DateTimePicker
+                value={parseDateLocal(targetDate)}
+                mode="date"
+                display="spinner"
+                onChange={handleDateChange}
+                locale="fr-FR"
+                themeVariant="light"
+                style={styles.pickerControl}
+              />
             </View>
-            <Pressable
-              style={[styles.saveButton, (!hasPendingChanges || saving) && styles.saveButtonDisabled]}
-              onPress={saveSelection}
-              disabled={!hasPendingChanges || saving}>
-              <Text style={styles.saveButtonText}>
-                {saving ? 'Enregistrement...' : 'Enregistrer'}
-              </Text>
-            </Pressable>
           </View>
-
-          {existingSelections.length > 0 && (
-            <View style={styles.historySection}>
-              <Text style={styles.historyTitle}>Selection du {targetDate}</Text>
-              {existingSelections.map((row) => (
-                <View key={`${row.bl_id}-${row.selected_at}`} style={styles.historyRow}>
-                  <Text style={styles.historyItem}>#{row.bl_id}</Text>
-                  <Text style={styles.historyMeta}>{row.destinataire}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </Modal>
+      ) : showDatePicker ? (
+        <DateTimePicker
+          value={parseDateLocal(targetDate)}
+          mode="date"
+          display="default"
+          onChange={handleDateChange}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
-  flex: { flex: 1 },
-  container: { padding: 20, paddingBottom: 100 },
-  header: { marginBottom: 24 },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: Brand.ink },
-  headerSubtitle: { fontSize: 14, color: Brand.muted, marginTop: 4 },
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  dateLabel: { fontSize: 14, fontWeight: '600', color: Brand.ink },
-  dateInput: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  safe: { flex: 1, backgroundColor: '#FAFAFA' },
+  listContent: { paddingHorizontal: 16 },
+  listHeader: { paddingTop: 20, paddingBottom: 8 },
+  listFooterSpace: { height: 16 },
+
+  dateSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  dateInputText: {
-    fontSize: 14,
-    color: Brand.ink,
-    fontWeight: '500',
-  },
-  actions: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  actionButton: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
+  dateLabelRow: { marginBottom: 6 },
+  dateLabelText: { fontSize: 12, fontWeight: '600', color: Brand.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dateDisplay: { fontSize: 16, fontWeight: '600', color: Brand.ink, flex: 1 },
+  changeDateBtn: {
+    backgroundColor: '#F5F5F5',
     borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+  },
+  changeDateText: { fontSize: 13, color: Brand.ink, fontWeight: '500' },
+
+  refreshBtn: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
     paddingVertical: 12,
     alignItems: 'center',
+    marginBottom: 12,
   },
-  actionText: { fontSize: 14, fontWeight: '600', color: Brand.ink },
-  error: { color: Brand.danger, fontSize: 13, marginBottom: 16 },
-  success: { color: Brand.success, fontSize: 13, marginBottom: 16 },
-  listSection: { marginBottom: 20 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: Brand.ink },
-  sectionCount: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    fontSize: 12,
-    color: Brand.muted,
-  },
-  loading: { padding: 20, alignItems: 'center' },
-  empty: { color: Brand.muted, fontSize: 14, textAlign: 'center', padding: 20 },
-  itemsScroll: { maxHeight: 280 },
-  item: {
+  refreshText: { fontSize: 14, fontWeight: '600', color: Brand.ink },
+
+  alertBox: { backgroundColor: '#FFF0F0', borderRadius: 12, borderWidth: 1, borderColor: '#FFD0D0', padding: 12, marginBottom: 10 },
+  alertText: { color: Brand.danger, fontSize: 13, fontWeight: '500' },
+  successBox: { backgroundColor: '#F0FFF4', borderRadius: 12, borderWidth: 1, borderColor: '#BBF7D0', padding: 12, marginBottom: 10 },
+  successText: { color: Brand.success, fontSize: 13, fontWeight: '500' },
+
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, justifyContent: 'center' },
+  loadingText: { fontSize: 14, color: Brand.muted },
+
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: Brand.ink },
+  countBadge: { backgroundColor: '#EBEBEB', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
+  countBadgeText: { fontSize: 13, fontWeight: '600', color: Brand.muted },
+
+  blCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     padding: 14,
-    backgroundColor: '#fafafa',
-    borderRadius: 12,
     marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: '#EBEBEB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  itemSaved: { backgroundColor: '#e8f5e9' },
-  itemPending: { backgroundColor: '#fff3e0' },
+  blCardSelected: {
+    borderColor: Brand.ember,
+    backgroundColor: '#FFFAF7',
+  },
   checkbox: {
     width: 24,
     height: 24,
-    borderRadius: 6,
+    borderRadius: 7,
     borderWidth: 2,
-    borderColor: '#ddd',
+    borderColor: '#D0D0D0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxOn: { backgroundColor: Brand.ink, borderColor: Brand.ink },
-  checkmark: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  itemContent: { flex: 1 },
-  itemTitle: { fontSize: 15, fontWeight: '600', color: Brand.ink },
-  itemMeta: { fontSize: 12, color: Brand.muted, marginTop: 2 },
-  tag: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Brand.success,
-    backgroundColor: '#c8e6c9',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    overflow: 'hidden',
+  checkboxOn: { backgroundColor: Brand.ember, borderColor: Brand.ember },
+  checkmark: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  blInfo: { flex: 1 },
+  blName: { fontSize: 15, fontWeight: '600', color: Brand.ink },
+  blMeta: { fontSize: 12, color: Brand.muted, marginTop: 2 },
+
+  tagSaved: { backgroundColor: '#E8F5E9', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  tagSavedText: { fontSize: 11, color: '#2E7D32', fontWeight: '600' },
+  tagPending: { backgroundColor: '#FFF8E1', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  tagPendingText: { fontSize: 11, color: '#E65100', fontWeight: '600' },
+  tagRemove: { backgroundColor: '#FFEBEE', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  tagRemoveText: { fontSize: 11, color: '#C62828', fontWeight: '600' },
+
+  emptyState: { alignItems: 'center', paddingVertical: 48, gap: 8 },
+  emptyText: { fontSize: 16, fontWeight: '600', color: Brand.muted },
+  emptySubText: { fontSize: 13, color: '#AAAAAA', textAlign: 'center', paddingHorizontal: 24 },
+
+  historySection: { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#EBEBEB' },
+  historyTitle: { fontSize: 13, fontWeight: '600', color: Brand.muted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  historyId: { fontSize: 13, fontWeight: '700', color: Brand.ink, minWidth: 52 },
+  historyDest: { flex: 1, fontSize: 13, color: Brand.ink },
+  historySel: { fontSize: 12, color: Brand.muted },
+
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
   },
-  footer: {
+  pickerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 32,
+  },
+  pickerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 16,
-    marginBottom: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEFEF',
   },
-  footerInfo: {},
-  footerCount: { fontSize: 32, fontWeight: '700', color: Brand.ink },
-  footerLabel: { fontSize: 12, color: Brand.muted },
-  saveButton: {
-    backgroundColor: Brand.ink,
+  pickerTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Brand.ink,
+  },
+  pickerDoneBtn: {
+    backgroundColor: Brand.ember,
     borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
   },
-  saveButtonDisabled: { opacity: 0.4 },
-  saveButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  historySection: { marginTop: 8 },
-  historyTitle: { fontSize: 14, fontWeight: '600', color: Brand.muted, marginBottom: 12 },
-  historyRow: {
+  pickerDoneText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  pickerControl: {
+    width: '100%',
+  },
+
+  stickyFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    padding: 10,
-    backgroundColor: '#fafafa',
-    borderRadius: 8,
-    marginBottom: 6,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#EBEBEB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  historyItem: { fontSize: 13, fontWeight: '600', color: Brand.ink },
-  historyMeta: { flex: 1, fontSize: 13, color: Brand.muted },
+  footerLeft: { gap: 2 },
+  footerCount: { fontSize: 28, fontWeight: '800', color: Brand.ink, lineHeight: 32 },
+  footerLabel: { fontSize: 12, color: Brand.muted },
+  saveBtn: {
+    backgroundColor: Brand.ink,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+  },
+  saveBtnDisabled: { opacity: 0.35 },
+  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });
