@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/services/config';
+import { emitAuthExpired } from '@/services/auth-events';
 import {
   AdminReportDetail,
   AdminReportSummary,
@@ -10,6 +11,17 @@ import {
   SelectionResponse,
   SubmitPreparationPayload,
 } from '@/types/app';
+
+export class ApiError extends Error {
+  status: number;
+  detail: string;
+  constructor(status: number, detail: string) {
+    super(detail);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
 
 type Method = 'GET' | 'POST';
 
@@ -49,25 +61,40 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     }
 
     if (!response.ok) {
-      const detail =
+      const rawDetail =
         typeof parsed === 'object' && parsed !== null && 'detail' in parsed
           ? String((parsed as { detail: unknown }).detail)
-          : `HTTP ${response.status}`;
-      throw new Error(detail);
+          : '';
+
+      if (response.status === 401) {
+        if (!path.startsWith('/auth/login')) emitAuthExpired();
+        throw new ApiError(401, rawDetail || 'Session expirée — veuillez vous reconnecter.');
+      }
+      if (response.status === 403) {
+        throw new ApiError(403, rawDetail || 'Vous n\'avez pas l\'autorisation pour cette action.');
+      }
+      if (response.status === 404) {
+        throw new ApiError(404, rawDetail || 'Ressource introuvable.');
+      }
+      if (response.status >= 500) {
+        throw new ApiError(response.status, rawDetail || 'Erreur serveur — réessayez dans un instant.');
+      }
+      throw new ApiError(response.status, rawDetail || `HTTP ${response.status}`);
     }
 
     return parsed as T;
   } catch (error) {
+    if (error instanceof ApiError) throw error;
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Delai depasse vers le serveur API');
+        throw new Error('Délai dépassé — vérifiez votre connexion.');
       }
       if (error.message.toLowerCase().includes('network request failed')) {
-        throw new Error(`Connexion impossible vers API (${API_BASE_URL}). Verifiez .env et que l'API tourne.`);
+        throw new Error('Connexion impossible — vérifiez votre réseau.');
       }
       throw error;
     }
-    throw new Error('Erreur reseau inconnue');
+    throw new Error('Erreur réseau inconnue');
   } finally {
     clearTimeout(timeout);
   }

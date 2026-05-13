@@ -1,34 +1,26 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Modal,
-  Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
 import { Brand } from '@/constants/brand';
 import { AdminReportDetail, AdminReportSummary } from '@/types/app';
+import { parseLocalIso, todayIso } from '@/utils/date';
+import { DatePickerModal } from '@/components/ui/date-picker-modal';
 
 interface Props {
   token: string;
   fullName: string;
-}
-
-function parseDateLocal(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1);
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 const STATUS_CONFIG = {
@@ -50,10 +42,6 @@ export function AdminScreen({ token, fullName }: Props) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') setShowDatePicker(false);
-    if (selectedDate) setReportDate(selectedDate.toISOString().slice(0, 10));
-  }, []);
 
   const loadReports = useCallback(async () => {
     try {
@@ -67,6 +55,8 @@ export function AdminScreen({ token, fullName }: Props) {
       setLoading(false);
     }
   }, [reportDate, token]);
+
+  useEffect(() => { void loadReports(); }, [loadReports]);
 
   const openDetail = async (reportId: number) => {
     try {
@@ -145,7 +135,7 @@ export function AdminScreen({ token, fullName }: Props) {
         <Text style={styles.dateSectionLabel}>Date du rapport</Text>
         <View style={styles.dateRow}>
           <Text style={styles.dateDisplay}>
-            {parseDateLocal(reportDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {parseLocalIso(reportDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
           </Text>
           <Pressable
             style={({ pressed }) => [styles.changeDateBtn, pressed && { opacity: 0.7 }]}
@@ -154,12 +144,6 @@ export function AdminScreen({ token, fullName }: Props) {
           </Pressable>
         </View>
       </View>
-
-      <Pressable
-        style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.8 }]}
-        onPress={loadReports}>
-        <Text style={styles.refreshText}>Charger les rapports</Text>
-      </Pressable>
 
       {error ? <View style={styles.alertBox}><Text style={styles.alertText}>{error}</Text></View> : null}
       {loading ? (
@@ -200,6 +184,14 @@ export function AdminScreen({ token, fullName }: Props) {
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={loadReports}
+            tintColor={Brand.ember}
+            colors={[Brand.ember]}
+          />
+        }
       />
 
       <Modal
@@ -279,54 +271,19 @@ export function AdminScreen({ token, fullName }: Props) {
                     <Text style={styles.commentText}>{detail.overall_comment}</Text>
                   </View>
                 ) : null}
-
-                <Pressable
-                  style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.85 }]}
-                  onPress={() => setDetail(null)}>
-                  <Text style={styles.closeBtnText}>Fermer</Text>
-                </Pressable>
               </>
             )}
           </View>
         </View>
       </Modal>
 
-      {Platform.OS === 'ios' ? (
-        <Modal
-          visible={showDatePicker}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowDatePicker(false)}>
-          <View style={styles.pickerOverlay}>
-            <View style={styles.pickerSheet}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Date du rapport</Text>
-                <Pressable
-                  style={({ pressed }) => [styles.pickerDoneBtn, pressed && { opacity: 0.7 }]}
-                  onPress={() => setShowDatePicker(false)}>
-                  <Text style={styles.pickerDoneText}>Confirmer</Text>
-                </Pressable>
-              </View>
-              <DateTimePicker
-                value={parseDateLocal(reportDate)}
-                mode="date"
-                display="spinner"
-                onChange={handleDateChange}
-                locale="fr-FR"
-                themeVariant="light"
-                style={styles.pickerControl}
-              />
-            </View>
-          </View>
-        </Modal>
-      ) : showDatePicker ? (
-        <DateTimePicker
-          value={parseDateLocal(reportDate)}
-          mode="date"
-          display="default"
-          onChange={handleDateChange}
-        />
-      ) : null}
+      <DatePickerModal
+        visible={showDatePicker}
+        title="Date du rapport"
+        value={reportDate}
+        onConfirm={(d) => { setReportDate(d); setShowDatePicker(false); }}
+        onCancel={() => setShowDatePicker(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -354,9 +311,6 @@ const styles = StyleSheet.create({
   dateDisplay: { fontSize: 16, fontWeight: '600', color: Brand.ink, flex: 1 },
   changeDateBtn: { backgroundColor: '#F5F5F5', borderRadius: 10, paddingVertical: 7, paddingHorizontal: 14 },
   changeDateText: { fontSize: 13, color: Brand.ink, fontWeight: '500' },
-
-  refreshBtn: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#EBEBEB', paddingVertical: 12, alignItems: 'center', marginBottom: 12 },
-  refreshText: { fontSize: 14, fontWeight: '600', color: Brand.ink },
 
   alertBox: { backgroundColor: '#FFF0F0', borderRadius: 12, borderWidth: 1, borderColor: '#FFD0D0', padding: 12, marginBottom: 10 },
   alertText: { color: Brand.danger, fontSize: 13, fontWeight: '500' },
@@ -438,15 +392,4 @@ const styles = StyleSheet.create({
   commentBox: { marginHorizontal: 20, marginTop: 12, backgroundColor: '#F9F9F9', borderRadius: 12, padding: 12 },
   commentLabel: { fontSize: 11, fontWeight: '700', color: Brand.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   commentText: { fontSize: 14, color: Brand.ink, lineHeight: 20 },
-
-  closeBtn: { marginHorizontal: 20, marginTop: 16, backgroundColor: Brand.ink, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
-  closeBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  pickerSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32 },
-  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#EFEFEF' },
-  pickerTitle: { fontSize: 15, fontWeight: '600', color: Brand.ink },
-  pickerDoneBtn: { backgroundColor: Brand.ember, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 8 },
-  pickerDoneText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  pickerControl: { width: '100%' },
 });

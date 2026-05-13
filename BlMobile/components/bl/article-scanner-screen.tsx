@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
 import { Brand } from '@/constants/brand';
@@ -27,6 +27,7 @@ interface Props {
 }
 
 export function ArticleScannerScreen({ token: _token, fullName: _fullName, onClose: _onClose }: Props) {
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -37,26 +38,39 @@ export function ArticleScannerScreen({ token: _token, fullName: _fullName, onClo
   const [isScanning, setIsScanning] = useState(true);
   const [hasSearched, setHasSearched] = useState(false);
 
-  const searchArticles = useCallback(async () => {
-    if (!searchQuery.trim()) {
+  const searchSeq = useRef(0);
+
+  const runSearch = useCallback(async (q: string) => {
+    const term = q.trim();
+    if (term.length < 2) {
       setArticles([]);
+      setError(null);
+      setLoading(false);
       return;
     }
+    const seq = ++searchSeq.current;
     try {
       setLoading(true);
       setError(null);
       setHasSearched(true);
       setSelectedArticle(null);
-      const res = await api.searchArticles(searchQuery.trim());
+      const res = await api.searchArticles(term);
+      if (seq !== searchSeq.current) return;
       setArticles(res.data);
       if (res.data.length === 1) setSelectedArticle(res.data[0] ?? null);
     } catch (e) {
+      if (seq !== searchSeq.current) return;
       setError(e instanceof Error ? e.message : 'Erreur');
       setArticles([]);
     } finally {
-      setLoading(false);
+      if (seq === searchSeq.current) setLoading(false);
     }
-  }, [searchQuery]);
+  }, []);
+
+  useEffect(() => {
+    const handle = setTimeout(() => { runSearch(searchQuery); }, 350);
+    return () => clearTimeout(handle);
+  }, [searchQuery, runSearch]);
 
   const handleScanResult = async (scanData: string) => {
     setIsScanning(false);
@@ -66,6 +80,7 @@ export function ArticleScannerScreen({ token: _token, fullName: _fullName, onClo
     setHasSearched(true);
     setArticles([]);
     setSelectedArticle(null);
+    setSearchQuery('');
     try {
       const article = await api.getArticleByCode(scanData);
       setSelectedArticle(article);
@@ -112,28 +127,34 @@ export function ArticleScannerScreen({ token: _token, fullName: _fullName, onClo
 
           <View style={styles.searchSection}>
             <View style={styles.searchRow}>
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Code article ou désignation…"
-                placeholderTextColor="#BBBBBB"
-                autoCapitalize="none"
-                autoCorrect={false}
-                onSubmitEditing={() => { Keyboard.dismiss(); searchArticles(); }}
-                returnKeyType="search"
-              />
+              <View style={styles.searchInputWrap}>
+                <Text style={styles.searchIcon}>🔍</Text>
+                <TextInput
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Code article ou désignation…"
+                  placeholderTextColor="#BBBBBB"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onSubmitEditing={() => { Keyboard.dismiss(); runSearch(searchQuery); }}
+                  returnKeyType="search"
+                />
+                {searchQuery.length > 0 && (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() => { setSearchQuery(''); setSelectedArticle(null); setHasSearched(false); }}
+                    style={({ pressed }) => [styles.clearBtn, pressed && { opacity: 0.6 }]}>
+                    <Text style={styles.clearBtnText}>✕</Text>
+                  </Pressable>
+                )}
+              </View>
               <Pressable
                 style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.8 }]}
                 onPress={openScanner}>
                 <Text style={styles.scanBtnText}>Scanner</Text>
               </Pressable>
             </View>
-            <Pressable
-              style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.85 }]}
-              onPress={() => { Keyboard.dismiss(); searchArticles(); }}>
-              <Text style={styles.searchBtnText}>Rechercher</Text>
-            </Pressable>
           </View>
 
           {error ? (
@@ -152,6 +173,13 @@ export function ArticleScannerScreen({ token: _token, fullName: _fullName, onClo
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>Aucun article trouvé</Text>
               <Text style={styles.emptySubText}>Vérifiez le code barre ou la désignation</Text>
+            </View>
+          ) : null}
+
+          {!loading && !hasSearched && !selectedArticle && articles.length === 0 && !error ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyHint}>Tapez au moins 2 caractères pour rechercher</Text>
+              <Text style={styles.emptySubText}>ou utilisez le bouton Scanner pour un code barre</Text>
             </View>
           ) : null}
 
@@ -212,16 +240,14 @@ export function ArticleScannerScreen({ token: _token, fullName: _fullName, onClo
         </View>
       </KeyboardAvoidingView>
 
-      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+      <Modal visible={showScanner} animationType="slide" statusBarTranslucent onRequestClose={() => setShowScanner(false)}>
         <View style={styles.cameraModal}>
-          <SafeAreaView style={styles.cameraModalSafe} edges={['top']}>
-            <View style={styles.cameraHeader}>
-              <Text style={styles.cameraTitle}>Scanner un code barre</Text>
-              <Pressable style={styles.cameraCloseBtn} onPress={() => setShowScanner(false)}>
-                <Text style={styles.cameraCloseBtnText}>Fermer</Text>
-              </Pressable>
-            </View>
-          </SafeAreaView>
+          <View style={[styles.cameraHeader, { paddingTop: insets.top + 12 }]}>
+            <Text style={styles.cameraTitle}>Scanner un code barre</Text>
+            <Pressable style={styles.cameraCloseBtn} onPress={() => setShowScanner(false)}>
+              <Text style={styles.cameraCloseBtnText}>Fermer</Text>
+            </Pressable>
+          </View>
           <View style={styles.cameraBody}>
             <CameraView
               style={styles.camera}
@@ -239,7 +265,7 @@ export function ArticleScannerScreen({ token: _token, fullName: _fullName, onClo
               <Text style={styles.scanHint}>Pointez vers le code barre</Text>
             </View>
           </View>
-          <View style={styles.cameraFooter}>
+          <View style={[styles.cameraFooter, { paddingBottom: insets.bottom + 20 }]}>
             <Pressable
               style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.8 }]}
               onPress={() => setIsScanning(true)}>
@@ -259,22 +285,38 @@ const styles = StyleSheet.create({
 
   searchSection: { gap: 10, marginBottom: 16 },
   searchRow: { flexDirection: 'row', gap: 10 },
-  searchInput: {
+  searchInputWrap: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#EBEBEB',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: Brand.ink,
+    paddingHorizontal: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 1,
   },
+  searchIcon: { fontSize: 15, marginRight: 8, color: Brand.muted },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: Brand.ink,
+  },
+  clearBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#E5E5E5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  clearBtnText: { fontSize: 11, color: '#777', fontWeight: '700' },
   scanBtn: {
     backgroundColor: Brand.ember,
     borderRadius: 14,
@@ -283,19 +325,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scanBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  searchBtn: {
-    backgroundColor: Brand.ink,
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  searchBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 
   alertBox: { backgroundColor: '#FFF0F0', borderRadius: 12, borderWidth: 1, borderColor: '#FFD0D0', padding: 12, marginBottom: 12 },
   alertText: { color: Brand.danger, fontSize: 13, fontWeight: '500' },
   loadingRow: { paddingVertical: 32, alignItems: 'center' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingBottom: 60 },
   emptyText: { fontSize: 17, fontWeight: '600', color: Brand.muted },
+  emptyHint: { fontSize: 15, fontWeight: '500', color: Brand.ink },
   emptySubText: { fontSize: 14, color: '#AAAAAA', textAlign: 'center' },
 
   resultSection: { flex: 1 },
@@ -345,13 +381,12 @@ const styles = StyleSheet.create({
   prixTtcValue: { fontSize: 24, fontWeight: '800', color: Brand.ember },
 
   cameraModal: { flex: 1, backgroundColor: '#0A0A0A' },
-  cameraModalSafe: { backgroundColor: '#0A0A0A' },
   cameraHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingBottom: 16,
     backgroundColor: Brand.ink,
   },
   cameraTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },

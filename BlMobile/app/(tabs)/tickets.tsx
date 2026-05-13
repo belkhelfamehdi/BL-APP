@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,15 +10,19 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { Asset } from 'expo-asset';
 import ViewShot from 'react-native-view-shot';
 
 import { api } from '@/services/api';
 import { Brand } from '@/constants/brand';
 import { Article } from '@/types/app';
 import { LogoMark } from '@/components/brand/logo-mark';
+
+const LOGO_ASSET = require('@/assets/images/logo.jpg');
 
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
@@ -161,10 +165,10 @@ const labelStyles = StyleSheet.create({
 });
 
 export default function TicketsScreen() {
+  const insets = useSafeAreaInsets();
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
-  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedArticlesList, setSelectedArticlesList] = useState<Article[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -172,15 +176,39 @@ export default function TicketsScreen() {
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [currentPage, setCurrentPage] = useState(1);
   const [generating, setGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{ done: number; total: number } | null>(null);
+  const [chunkArticles, setChunkArticles] = useState<Article[]>([]);
+  const [showScanner, setShowScanner] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isScanning, setIsScanning] = useState(true);
+  const [scanFeedback, setScanFeedback] = useState<{ kind: 'added' | 'duplicate' | 'error'; text: string } | null>(null);
+  const scanResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (scanResumeTimer.current) clearTimeout(scanResumeTimer.current); }, []);
+
+  useEffect(() => {
+    void Asset.fromModule(LOGO_ASSET).downloadAsync().catch(() => {});
+  }, []);
 
   const pdfLabelRef = useRef<ViewShot | null>(null);
   const labelRefs = useRef<Map<string, React.RefObject<ViewShot | null>>>(new Map());
 
-  const loadArticles = useCallback(async (query = '') => {
+  const searchSeq = useRef(0);
+
+  const loadArticles = useCallback(async (query: string) => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setArticles([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const seq = ++searchSeq.current;
     setLoading(true);
     setError(null);
     try {
-      const res = await api.searchArticles(query.trim() || 'a');
+      const res = await api.searchArticles(term);
+      if (seq !== searchSeq.current) return;
       if (res?.data && Array.isArray(res.data)) {
         const unique = res.data.filter((a, i, arr) => i === arr.findIndex((x) => x.code === a.code));
         setArticles(unique);
@@ -190,15 +218,59 @@ export default function TicketsScreen() {
         setError('Format de réponse invalide');
       }
     } catch (e) {
+      if (seq !== searchSeq.current) return;
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
-      setLoading(false);
+      if (seq === searchSeq.current) setLoading(false);
     }
   }, []);
 
-  React.useEffect(() => { loadArticles(); }, [loadArticles]);
+  useEffect(() => {
+    const handle = setTimeout(() => { loadArticles(searchQuery); }, 350);
+    return () => clearTimeout(handle);
+  }, [searchQuery, loadArticles]);
 
   const handleSearch = useCallback(() => { loadArticles(searchQuery); }, [searchQuery, loadArticles]);
+
+  const openScanner = async () => {
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('Permission caméra', 'La caméra est nécessaire pour scanner les codes barres.');
+        return;
+      }
+    }
+    setIsScanning(true);
+    setShowScanner(true);
+  };
+
+  const handleScanResult = async (scanData: string) => {
+    setIsScanning(false);
+    if (scanResumeTimer.current) clearTimeout(scanResumeTimer.current);
+    try {
+      const article = await api.getArticleByCode(scanData);
+      if (!article) {
+        setScanFeedback({ kind: 'error', text: 'Article non trouvé' });
+      } else {
+        let wasDuplicate = false;
+        setSelectedArticlesList((prev) => {
+          if (prev.some((a) => a.code === article.code)) { wasDuplicate = true; return prev; }
+          return [...prev, article];
+        });
+        setScanFeedback(
+          wasDuplicate
+            ? { kind: 'duplicate', text: 'Déjà dans la sélection' }
+            : { kind: 'added', text: article.designation.length > 38 ? article.designation.substring(0, 38) + '…' : article.designation }
+        );
+      }
+    } catch {
+      setScanFeedback({ kind: 'error', text: 'Article non trouvé' });
+    }
+    scanResumeTimer.current = setTimeout(() => {
+      setScanFeedback(null);
+      setIsScanning(true);
+    }, 900);
+  };
 
   const getPaginatedArticles = useCallback(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -207,27 +279,32 @@ export default function TicketsScreen() {
 
   const totalPages = Math.ceil(articles.length / itemsPerPage);
 
-  const toggleArticleSelection = useCallback((code: string) => {
-    setSelectedArticles((prev) => {
-      const next = new Set(prev);
-      if (next.has(code)) next.delete(code); else next.add(code);
-      return next;
-    });
-  }, []);
+  const isArticleSelected = useCallback((code: string) => selectedArticlesList.some((a) => a.code === code), [selectedArticlesList]);
 
-  const toggleSelectionMode = useCallback(() => {
-    setSelectionMode((prev) => !prev);
-    setSelectedArticles(new Set());
+  const toggleArticleSelection = useCallback((article: Article) => {
+    setSelectedArticlesList((prev) => {
+      const exists = prev.some((a) => a.code === article.code);
+      if (exists) return prev.filter((a) => a.code !== article.code);
+      return [...prev, article];
+    });
   }, []);
 
   const selectAllOnPage = useCallback(() => {
     const pageArticles = getPaginatedArticles();
-    setSelectedArticles((prev) => {
-      const next = new Set(prev);
-      pageArticles.forEach((a) => next.add(a.code));
-      return next;
+    setSelectedArticlesList((prev) => {
+      const existingCodes = new Set(prev.map((a) => a.code));
+      const newArticles = pageArticles.filter((a) => !existingCodes.has(a.code));
+      return [...prev, ...newArticles];
     });
   }, [getPaginatedArticles]);
+
+  const selectAllResults = useCallback(() => {
+    setSelectedArticlesList((prev) => {
+      const existingCodes = new Set(prev.map((a) => a.code));
+      const newArticles = articles.filter((a) => !existingCodes.has(a.code));
+      return [...prev, ...newArticles];
+    });
+  }, [articles.length]);
 
   const generatePdfFromImages = async (imageUris: string[]): Promise<string> => {
     const LABELS_PER_PAGE = 4;
@@ -249,29 +326,49 @@ export default function TicketsScreen() {
   };
 
   const handlePrintAllLabels = useCallback(async () => {
-    const list = articles.filter((a) => selectedArticles.has(a.code));
-    if (list.length === 0) { Alert.alert('Attention', 'Aucun article sélectionné'); return; }
+    if (selectedArticlesList.length === 0) { Alert.alert('Attention', 'Aucun article sélectionné'); return; }
+    // Make sure logo is fully cached before any chunk renders.
+    try { await Asset.fromModule(LOGO_ASSET).downloadAsync(); } catch { /* ignore */ }
+    const CHUNK_SIZE = 6;
+    const RENDER_WAIT_MS = 800;
+    const total = selectedArticlesList.length;
     try {
       setGenerating(true);
-      await new Promise((r) => setTimeout(r, 1200));
+      setGenerationProgress({ done: 0, total });
       const uris: string[] = [];
-      for (const article of list) {
-        let ref = labelRefs.current.get(article.code);
-        if (!ref) { ref = React.createRef<ViewShot | null>(); labelRefs.current.set(article.code, ref); }
-        try {
-          const uri = await (ref.current as ViewShot | null)?.capture?.();
-          if (uri) uris.push(uri);
-        } catch { /* skip */ }
+      for (let i = 0; i < total; i += CHUNK_SIZE) {
+        const batch = selectedArticlesList.slice(i, i + CHUNK_SIZE);
+        // ensure refs exist for this batch
+        for (const article of batch) {
+          if (!labelRefs.current.has(article.code)) {
+            labelRefs.current.set(article.code, React.createRef<ViewShot | null>());
+          }
+        }
+        setChunkArticles(batch);
+        await new Promise((r) => setTimeout(r, RENDER_WAIT_MS));
+        for (const article of batch) {
+          const ref = labelRefs.current.get(article.code);
+          try {
+            const uri = await (ref?.current as ViewShot | null)?.capture?.();
+            if (uri) uris.push(uri);
+          } catch { /* skip */ }
+          setGenerationProgress((p) => p ? { done: p.done + 1, total: p.total } : null);
+        }
       }
+      setChunkArticles([]);
       if (uris.length > 0) {
         const pdfUri = await generatePdfFromImages(uris);
         if (pdfUri && await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(pdfUri, { mimeType: 'application/pdf', dialogTitle: `${list.length} étiquettes`, UTI: 'com.adobe.pdf' });
+          await Sharing.shareAsync(pdfUri, { mimeType: 'application/pdf', dialogTitle: `${total} étiquettes`, UTI: 'com.adobe.pdf' });
         } else { Alert.alert('PDF créé', `${uris.length} étiquette${uris.length > 1 ? 's' : ''}`); }
       } else { Alert.alert('Erreur', 'Aucune étiquette capturée'); }
     } catch (e: any) { Alert.alert('Erreur', e?.message || 'Erreur inconnue'); }
-    finally { setGenerating(false); }
-  }, [articles, selectedArticles]);
+    finally {
+      setGenerating(false);
+      setGenerationProgress(null);
+      setChunkArticles([]);
+    }
+  }, [selectedArticlesList]);
 
   const handlePrintSingle = useCallback(async () => {
     if (!selectedArticle || !pdfLabelRef.current) return;
@@ -291,7 +388,7 @@ export default function TicketsScreen() {
   const closePreview = useCallback(() => { setShowPreview(false); setSelectedArticle(null); }, []);
 
   const renderArticleItem = ({ item }: { item: Article }) => {
-    const isSelected = selectedArticles.has(item.code);
+    const isSelected = isArticleSelected(item.code);
     return (
       <Pressable
         style={({ pressed }) => [
@@ -299,12 +396,15 @@ export default function TicketsScreen() {
           isSelected && styles.articleCardSelected,
           pressed && { opacity: 0.85 },
         ]}
-        onPress={() => selectionMode ? toggleArticleSelection(item.code) : (() => { setSelectedArticle(item); setShowPreview(true); })()}>
-        {selectionMode && (
+        onPress={() => { setSelectedArticle(item); setShowPreview(true); }}>
+        <Pressable
+          hitSlop={8}
+          onPress={() => toggleArticleSelection(item)}
+          style={({ pressed }) => [styles.checkboxHit, pressed && { opacity: 0.6 }]}>
           <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>
             {isSelected && <Text style={styles.checkmark}>✓</Text>}
           </View>
-        )}
+        </Pressable>
         <View style={styles.articleInfo}>
           <Text style={styles.articleCode}>{item.code}</Text>
           <Text style={styles.articleDesignation} numberOfLines={2}>{item.designation}</Text>
@@ -318,16 +418,14 @@ export default function TicketsScreen() {
     );
   };
 
-  const selectedList = articles.filter((a) => selectedArticles.has(a.code));
-
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Étiquettes prix</Text>
         <Text style={styles.headerSub}>
-          {selectionMode
-            ? `${selectedArticles.size} article${selectedArticles.size > 1 ? 's' : ''} sélectionné${selectedArticles.size > 1 ? 's' : ''}`
-            : 'Sélectionnez un article pour générer son étiquette'}
+          {selectedArticlesList.length > 0
+            ? `${selectedArticlesList.length} sélectionné${selectedArticlesList.length > 1 ? 's' : ''} — touchez ☐ pour cocher, l'article pour aperçu`
+            : 'Recherchez un article ou scannez son code barre'}
         </Text>
       </View>
 
@@ -342,6 +440,11 @@ export default function TicketsScreen() {
           returnKeyType="search"
         />
         <Pressable
+          style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.85 }]}
+          onPress={openScanner}>
+          <Text style={styles.scanBtnText}>Scanner</Text>
+        </Pressable>
+        <Pressable
           style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.85 }]}
           onPress={handleSearch}>
           <Text style={styles.searchBtnText}>Chercher</Text>
@@ -351,40 +454,41 @@ export default function TicketsScreen() {
       {error ? <View style={styles.alertBox}><Text style={styles.alertText}>{error}</Text></View> : null}
       {(loading || generating) ? <ActivityIndicator color={Brand.ember} style={styles.loader} size="large" /> : null}
 
-      {selectionMode ? (
-        <View style={styles.toolbar}>
-          <Pressable style={styles.toolbarBtn} onPress={selectAllOnPage}>
-            <Text style={styles.toolbarBtnText}>Tout sélectionner</Text>
+      <View style={styles.chipsRow}>
+        <Pressable style={({ pressed }) => [styles.chip, pressed && { opacity: 0.7 }]} onPress={selectAllOnPage}>
+          <Text style={styles.chipText}>Cocher la page</Text>
+        </Pressable>
+        <Pressable style={({ pressed }) => [styles.chip, pressed && { opacity: 0.7 }]} onPress={selectAllResults}>
+          <Text style={styles.chipText}>Tout ({articles.length})</Text>
+        </Pressable>
+        {selectedArticlesList.length > 0 && (
+          <Pressable style={({ pressed }) => [styles.chipDanger, pressed && { opacity: 0.7 }]} onPress={() => setSelectedArticlesList([])}>
+            <Text style={styles.chipDangerText}>Effacer la sélection</Text>
           </Pressable>
-          <Pressable style={styles.toolbarBtn} onPress={() => setSelectedArticles(new Set())}>
-            <Text style={styles.toolbarBtnText}>Effacer</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.toolbarBtn, styles.toolbarBtnAccent]}
-            onPress={handlePrintAllLabels}>
-            <Text style={styles.toolbarBtnAccentText}>Générer PDF ({selectedArticles.size})</Text>
-          </Pressable>
-          <Pressable style={styles.toolbarBtnCancel} onPress={toggleSelectionMode}>
-            <Text style={styles.toolbarBtnCancelText}>Annuler</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.actionBar}>
-          <Pressable
-            style={({ pressed }) => [styles.selectionModeBtn, pressed && { opacity: 0.85 }]}
-            onPress={toggleSelectionMode}>
-            <Text style={styles.selectionModeBtnText}>Mode sélection multiple</Text>
-          </Pressable>
-        </View>
-      )}
+        )}
+      </View>
 
       <FlatList
         data={getPaginatedArticles()}
         renderItem={renderArticleItem}
         keyExtractor={(item) => item.code}
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, selectedArticlesList.length > 0 && { paddingBottom: 96 }]}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          loading ? null : (
+            <View style={styles.listEmpty}>
+              <Text style={styles.listEmptyTitle}>
+                {searchQuery.trim().length === 0 ? 'Aucun article chargé' : 'Aucun résultat'}
+              </Text>
+              <Text style={styles.listEmptySub}>
+                {searchQuery.trim().length === 0
+                  ? 'Tapez au moins 2 caractères pour rechercher, ou scannez un code barre.'
+                  : `Aucun article ne correspond à « ${searchQuery.trim()} »`}
+              </Text>
+            </View>
+          )
+        }
         ListFooterComponent={() => (
           <View style={styles.pagination}>
             <View style={styles.perPage}>
@@ -422,6 +526,40 @@ export default function TicketsScreen() {
           </View>
         )}
       />
+
+      {selectedArticlesList.length > 0 && !generating && (
+        <View style={styles.floatBar}>
+          <View style={styles.floatBarInner}>
+            <View style={styles.floatBarCount}>
+              <Text style={styles.floatBarCountNum}>{selectedArticlesList.length}</Text>
+              <Text style={styles.floatBarCountLabel}>article{selectedArticlesList.length > 1 ? 's' : ''}</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.floatBarPrint, pressed && { opacity: 0.85 }]}
+              onPress={handlePrintAllLabels}>
+              <Text style={styles.floatBarPrintText}>Générer PDF</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {generating && generationProgress && (
+        <View style={styles.floatBar}>
+          <View style={styles.floatBarInner}>
+            <View style={styles.floatBarCount}>
+              <ActivityIndicator color="#FFFFFF" />
+              <Text style={[styles.floatBarCountLabel, { marginLeft: 8 }]}>
+                Capture {generationProgress.done} / {generationProgress.total}
+              </Text>
+            </View>
+            <View style={styles.floatBarPrint}>
+              <Text style={styles.floatBarPrintText}>
+                {Math.round((generationProgress.done / generationProgress.total) * 100)}%
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
 
       <Modal visible={showPreview} animationType="slide" transparent onRequestClose={closePreview}>
         <View style={styles.modalOverlay}>
@@ -462,9 +600,9 @@ export default function TicketsScreen() {
         </View>
       )}
 
-      {generating && selectedList.length > 0 && (
+      {chunkArticles.length > 0 && (
         <View style={{ position: 'absolute', left: -9999, top: 0, width: 410 }}>
-          {selectedList.map((article) => {
+          {chunkArticles.map((article) => {
             let ref = labelRefs.current.get(article.code);
             if (!ref) { ref = React.createRef<ViewShot | null>(); labelRefs.current.set(article.code, ref); }
             return (
@@ -475,6 +613,60 @@ export default function TicketsScreen() {
           })}
         </View>
       )}
+
+      <Modal visible={showScanner} animationType="slide" statusBarTranslucent onRequestClose={() => setShowScanner(false)}>
+        <View style={scannerStyles.cameraModal}>
+          <View style={[scannerStyles.cameraHeader, { paddingTop: insets.top + 12 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={scannerStyles.cameraTitle}>Scanner</Text>
+              <Text style={scannerStyles.cameraSubtitle}>
+                {selectedArticlesList.length > 0
+                  ? `${selectedArticlesList.length} article${selectedArticlesList.length > 1 ? 's' : ''} dans la sélection`
+                  : 'Scannez plusieurs codes à la suite'}
+              </Text>
+            </View>
+            <Pressable style={scannerStyles.cameraCloseBtn} onPress={() => setShowScanner(false)}>
+              <Text style={scannerStyles.cameraCloseBtnText}>
+                {selectedArticlesList.length > 0 ? `Terminé (${selectedArticlesList.length})` : 'Fermer'}
+              </Text>
+            </Pressable>
+          </View>
+          <View style={scannerStyles.cameraBody}>
+            <CameraView
+              style={scannerStyles.camera}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39'] }}
+              onBarcodeScanned={isScanning ? (b) => { if (b.data) handleScanResult(b.data); } : undefined}
+            />
+            <View style={scannerStyles.scanOverlay} pointerEvents="none">
+              <View style={scannerStyles.scanFrame}>
+                <View style={[scannerStyles.scanCorner, scannerStyles.scanCornerTL]} />
+                <View style={[scannerStyles.scanCorner, scannerStyles.scanCornerTR]} />
+                <View style={[scannerStyles.scanCorner, scannerStyles.scanCornerBL]} />
+                <View style={[scannerStyles.scanCorner, scannerStyles.scanCornerBR]} />
+              </View>
+              <Text style={scannerStyles.scanHint}>
+                {scanFeedback ? '' : 'Pointez vers le code barre'}
+              </Text>
+            </View>
+            {scanFeedback && (
+              <View pointerEvents="none" style={scannerStyles.feedbackWrap}>
+                <View style={[
+                  scannerStyles.feedbackPill,
+                  scanFeedback.kind === 'added' && scannerStyles.feedbackPillAdded,
+                  scanFeedback.kind === 'duplicate' && scannerStyles.feedbackPillDuplicate,
+                  scanFeedback.kind === 'error' && scannerStyles.feedbackPillError,
+                ]}>
+                  <Text style={scannerStyles.feedbackIcon}>
+                    {scanFeedback.kind === 'added' ? '✓' : scanFeedback.kind === 'duplicate' ? '•' : '!'}
+                  </Text>
+                  <Text style={scannerStyles.feedbackText} numberOfLines={1}>{scanFeedback.text}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -514,20 +706,39 @@ const styles = StyleSheet.create({
   alertText: { color: Brand.danger, fontSize: 13, fontWeight: '500' },
   loader: { marginVertical: 20 },
 
-  toolbar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
-  toolbarBtn: { backgroundColor: '#F0F0F0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
-  toolbarBtnText: { fontSize: 13, color: Brand.ink, fontWeight: '500' },
-  toolbarBtnAccent: { backgroundColor: Brand.ember },
-  toolbarBtnAccentText: { fontSize: 13, color: '#FFFFFF', fontWeight: '700' },
-  toolbarBtnCancel: { backgroundColor: '#FFEBEE', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9 },
-  toolbarBtnCancelText: { fontSize: 13, color: Brand.danger, fontWeight: '600' },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
+  chip: { backgroundColor: '#F0F0F0', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  chipText: { fontSize: 13, color: Brand.ink, fontWeight: '500' },
+  chipDanger: { backgroundColor: '#FFEBEE', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  chipDangerText: { fontSize: 13, color: Brand.danger, fontWeight: '600' },
 
-  actionBar: { paddingHorizontal: 14, paddingBottom: 10 },
-  selectionModeBtn: { backgroundColor: Brand.ink, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
-  selectionModeBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  floatBar: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    backgroundColor: Brand.ink,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  floatBarInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  floatBarCount: { flexDirection: 'row', alignItems: 'baseline', gap: 6, paddingLeft: 6 },
+  floatBarCountNum: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
+  floatBarCountLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '500' },
+  floatBarPrint: { backgroundColor: Brand.ember, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 11 },
+  floatBarPrintText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 
   list: { flex: 1 },
   listContent: { paddingHorizontal: 14, paddingBottom: 16 },
+  listEmpty: { alignItems: 'center', paddingVertical: 56, gap: 8, paddingHorizontal: 32 },
+  listEmptyTitle: { fontSize: 16, fontWeight: '700', color: Brand.ink },
+  listEmptySub: { fontSize: 13, color: Brand.muted, textAlign: 'center', lineHeight: 18 },
   articleCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
@@ -550,7 +761,8 @@ const styles = StyleSheet.create({
   prixBadge: { backgroundColor: Brand.ember, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 },
   prixBadgeSelected: { backgroundColor: Brand.emberDark },
   prixText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
-  checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: '#D0D0D0', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  checkboxHit: { paddingVertical: 4, paddingRight: 10, paddingLeft: 2 },
+  checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: '#D0D0D0', alignItems: 'center', justifyContent: 'center' },
   checkboxOn: { backgroundColor: Brand.ember, borderColor: Brand.ember },
   checkmark: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
 
@@ -591,4 +803,51 @@ const styles = StyleSheet.create({
   closeBtnText: { fontSize: 14, color: Brand.muted, fontWeight: '500' },
 
   hiddenCapture: { position: 'absolute', left: -9999, top: 0, width: 400, height: 200, opacity: 0 },
+  scanBtn: { backgroundColor: Brand.ember, borderRadius: 12, paddingHorizontal: 14, justifyContent: 'center' },
+  scanBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+});
+
+const scannerStyles = StyleSheet.create({
+  cameraModal: { flex: 1, backgroundColor: '#0A0A0A' },
+  cameraHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    backgroundColor: Brand.ink,
+  },
+  cameraTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
+  cameraSubtitle: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginTop: 2 },
+  cameraCloseBtn: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14, marginLeft: 12 },
+  cameraCloseBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
+  cameraBody: { flex: 1, position: 'relative' },
+  camera: { flex: 1 },
+  scanOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', gap: 24 },
+  feedbackWrap: { position: 'absolute', left: 0, right: 0, bottom: 60, alignItems: 'center' },
+  feedbackPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 999,
+    maxWidth: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  feedbackPillAdded: { backgroundColor: '#1FA871' },
+  feedbackPillDuplicate: { backgroundColor: '#3C3C3C' },
+  feedbackPillError: { backgroundColor: Brand.danger },
+  feedbackIcon: { fontSize: 16, fontWeight: '800', color: '#FFFFFF' },
+  feedbackText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', flexShrink: 1 },
+  scanFrame: { width: 280, height: 180, position: 'relative' },
+  scanCorner: { position: 'absolute', width: 24, height: 24, borderColor: Brand.ember, borderRadius: 4 },
+  scanCornerTL: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4 },
+  scanCornerTR: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4 },
+  scanCornerBL: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4 },
+  scanCornerBR: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4 },
+  scanHint: { color: 'rgba(255,255,255,0.8)', fontSize: 15, textAlign: 'center', fontWeight: '500' },
 });

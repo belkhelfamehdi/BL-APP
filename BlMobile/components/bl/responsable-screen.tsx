@@ -2,35 +2,24 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Modal,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api } from '@/services/api';
 import { Brand } from '@/constants/brand';
 import { ArticleBL, SelectionRow } from '@/types/app';
+import { parseLocalIso, tomorrowIso } from '@/utils/date';
+import { DatePickerModal } from '@/components/ui/date-picker-modal';
 
 interface Props {
   token: string;
   fullName: string;
-}
-
-function parseDateLocal(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1);
-}
-
-function tomorrowIso(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
 }
 
 export function ResponsableScreen({ token, fullName }: Props) {
@@ -43,13 +32,17 @@ export function ResponsableScreen({ token, fullName }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [filterQuery, setFilterQuery] = useState('');
 
-  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') setShowDatePicker(false);
-    if (selectedDate) {
-      setTargetDate(selectedDate.toISOString().slice(0, 10));
-    }
-  }, []);
+  const filteredArticles = useMemo(() => {
+    const q = filterQuery.trim().toLowerCase();
+    if (!q) return articles;
+    return articles.filter((a) =>
+      (a.Destinataire ?? '').toLowerCase().includes(q) ||
+      String(a.IDBL).includes(q)
+    );
+  }, [articles, filterQuery]);
+
 
   const existingSelectedIdsSet = useMemo(
     () => new Set(existingSelections.map((row) => row.bl_id)),
@@ -142,7 +135,7 @@ export function ResponsableScreen({ token, fullName }: Props) {
           <Text style={styles.blMeta}>
             #{item.IDBL}
             {item.DateBL
-              ? ` • ${parseDateLocal(item.DateBL).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
+              ? ` • ${parseLocalIso(item.DateBL).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
               : ''}
             {item.references_count ? ` • ${item.references_count} art.` : ''}
           </Text>
@@ -166,7 +159,7 @@ export function ResponsableScreen({ token, fullName }: Props) {
     );
   };
 
-  const displayDate = parseDateLocal(targetDate).toLocaleDateString('fr-FR', {
+  const displayDate = parseLocalIso(targetDate).toLocaleDateString('fr-FR', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -188,11 +181,26 @@ export function ResponsableScreen({ token, fullName }: Props) {
         </View>
       </View>
 
-      <Pressable
-        style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.8 }]}
-        onPress={() => { void loadArticles(); void loadSelections(); }}>
-        <Text style={styles.refreshText}>Actualiser les BL</Text>
-      </Pressable>
+      <View style={styles.filterWrap}>
+        <Text style={styles.filterIcon}>🔍</Text>
+        <TextInput
+          style={styles.filterInput}
+          value={filterQuery}
+          onChangeText={setFilterQuery}
+          placeholder="Filtrer par client ou #BL…"
+          placeholderTextColor="#BBBBBB"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {filterQuery.length > 0 && (
+          <Pressable
+            hitSlop={8}
+            onPress={() => setFilterQuery('')}
+            style={({ pressed }) => [styles.filterClear, pressed && { opacity: 0.6 }]}>
+            <Text style={styles.filterClearText}>✕</Text>
+          </Pressable>
+        )}
+      </View>
 
       {error ? (
         <View style={styles.alertBox}>
@@ -216,7 +224,9 @@ export function ResponsableScreen({ token, fullName }: Props) {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>BL disponibles</Text>
         <View style={styles.countBadge}>
-          <Text style={styles.countBadgeText}>{articles.length}</Text>
+          <Text style={styles.countBadgeText}>
+            {filterQuery ? `${filteredArticles.length} / ${articles.length}` : articles.length}
+          </Text>
         </View>
       </View>
     </View>
@@ -224,6 +234,14 @@ export function ResponsableScreen({ token, fullName }: Props) {
 
   const renderEmpty = () => {
     if (loadingArticles) return null;
+    if (filterQuery && articles.length > 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>Aucun résultat</Text>
+          <Text style={styles.emptySubText}>Aucun BL ne correspond à « {filterQuery} »</Text>
+        </View>
+      );
+    }
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyText}>Aucun BL disponible</Text>
@@ -237,7 +255,7 @@ export function ResponsableScreen({ token, fullName }: Props) {
     return (
       <View style={styles.historySection}>
         <Text style={styles.historyTitle}>
-          Sélection enregistrée — {parseDateLocal(targetDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
+          Sélection enregistrée — {parseLocalIso(targetDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
         </Text>
         {existingSelections.map((row) => (
           <View key={`${row.bl_id}-${row.selected_at}`} style={styles.historyRow}>
@@ -254,7 +272,7 @@ export function ResponsableScreen({ token, fullName }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       <FlatList
-        data={articles}
+        data={filteredArticles}
         renderItem={renderBLItem}
         keyExtractor={(item) => String(item.IDBL)}
         ListHeaderComponent={renderHeader}
@@ -291,42 +309,13 @@ export function ResponsableScreen({ token, fullName }: Props) {
         </Pressable>
       </View>
 
-      {Platform.OS === 'ios' ? (
-        <Modal
-          visible={showDatePicker}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowDatePicker(false)}>
-          <View style={styles.pickerOverlay}>
-            <View style={styles.pickerSheet}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Date de préparation</Text>
-                <Pressable
-                  style={({ pressed }) => [styles.pickerDoneBtn, pressed && { opacity: 0.7 }]}
-                  onPress={() => setShowDatePicker(false)}>
-                  <Text style={styles.pickerDoneText}>Confirmer</Text>
-                </Pressable>
-              </View>
-              <DateTimePicker
-                value={parseDateLocal(targetDate)}
-                mode="date"
-                display="spinner"
-                onChange={handleDateChange}
-                locale="fr-FR"
-                themeVariant="light"
-                style={styles.pickerControl}
-              />
-            </View>
-          </View>
-        </Modal>
-      ) : showDatePicker ? (
-        <DateTimePicker
-          value={parseDateLocal(targetDate)}
-          mode="date"
-          display="default"
-          onChange={handleDateChange}
-        />
-      ) : null}
+      <DatePickerModal
+        visible={showDatePicker}
+        title="Date de préparation"
+        value={targetDate}
+        onConfirm={(d) => { setTargetDate(d); setShowDatePicker(false); }}
+        onCancel={() => setShowDatePicker(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -362,16 +351,28 @@ const styles = StyleSheet.create({
   },
   changeDateText: { fontSize: 13, color: Brand.ink, fontWeight: '500' },
 
-  refreshBtn: {
+  filterWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#EBEBEB',
-    paddingVertical: 12,
-    alignItems: 'center',
+    paddingHorizontal: 12,
     marginBottom: 12,
   },
-  refreshText: { fontSize: 14, fontWeight: '600', color: Brand.ink },
+  filterIcon: { fontSize: 14, marginRight: 8, color: Brand.muted },
+  filterInput: { flex: 1, paddingVertical: 11, fontSize: 15, color: Brand.ink },
+  filterClear: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#E5E5E5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  filterClearText: { fontSize: 11, color: '#777', fontWeight: '700' },
 
   alertBox: { backgroundColor: '#FFF0F0', borderRadius: 12, borderWidth: 1, borderColor: '#FFD0D0', padding: 12, marginBottom: 10 },
   alertText: { color: Brand.danger, fontSize: 13, fontWeight: '500' },
@@ -438,46 +439,6 @@ const styles = StyleSheet.create({
   historyId: { fontSize: 13, fontWeight: '700', color: Brand.ink, minWidth: 52 },
   historyDest: { flex: 1, fontSize: 13, color: Brand.ink },
   historySel: { fontSize: 12, color: Brand.muted },
-
-  pickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  pickerSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 32,
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EFEFEF',
-  },
-  pickerTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Brand.ink,
-  },
-  pickerDoneBtn: {
-    backgroundColor: Brand.ember,
-    borderRadius: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-  },
-  pickerDoneText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  pickerControl: {
-    width: '100%',
-  },
 
   stickyFooter: {
     flexDirection: 'row',

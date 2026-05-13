@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AdminScreen } from '@/components/bl/admin-screen';
@@ -8,6 +8,8 @@ import { PreparateurScreen } from '@/components/bl/preparateur-screen';
 import { ResponsableScreen } from '@/components/bl/responsable-screen';
 import { Brand } from '@/constants/brand';
 import { api } from '@/services/api';
+import { onAuthExpired } from '@/services/auth-events';
+import { clearSession, loadSession, saveSession } from '@/services/auth-storage';
 import { User } from '@/types/app';
 
 const roleConfig: Record<User['role'], { label: string; color: string; bg: string }> = {
@@ -52,6 +54,35 @@ export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [booting, setBooting] = useState(true);
+
+  useEffect(() => onAuthExpired(() => {
+    void clearSession();
+    setToken(null);
+    setUser(null);
+    setError('Session expirée — veuillez vous reconnecter.');
+  }), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const session = await loadSession();
+      if (cancelled) return;
+      if (!session) { setBooting(false); return; }
+      try {
+        await api.me(session.token);
+        if (cancelled) return;
+        setToken(session.token);
+        setUser(session.user);
+      } catch {
+        if (cancelled) return;
+        await clearSession();
+      } finally {
+        if (!cancelled) setBooting(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const onLogin = async (username: string, password: string) => {
     try {
@@ -60,6 +91,7 @@ export default function HomeScreen() {
       const res = await api.login(username, password);
       setToken(res.token);
       setUser(res.user);
+      await saveSession({ token: res.token, user: res.user });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Connexion impossible');
     } finally {
@@ -72,6 +104,7 @@ export default function HomeScreen() {
     setToken(null);
     setUser(null);
     setError(null);
+    await clearSession();
     if (!currentToken) return;
     try {
       await api.logout(currentToken);
@@ -88,6 +121,14 @@ export default function HomeScreen() {
     }
     return <AdminScreen token={token} fullName={user.full_name} />;
   }, [token, user]);
+
+  if (booting) {
+    return (
+      <View style={styles.boot}>
+        <ActivityIndicator color={Brand.ember} size="large" />
+      </View>
+    );
+  }
 
   if (!token || !user) {
     return <LoginScreen loading={loading} error={error} onLogin={onLogin} />;
@@ -124,6 +165,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FAFAFA',
   },
+  boot: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAFAFA' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

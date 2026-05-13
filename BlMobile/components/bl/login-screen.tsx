@@ -123,19 +123,21 @@ export function LoginScreen({ loading, error, onLogin }: Props) {
               </Text>
             </Pressable>
 
-            <View style={styles.demoSection}>
-              <Text style={styles.demoLabel}>Accès démo</Text>
-              <View style={styles.demoRow}>
-                {quickUsers.map((u) => (
-                  <Pressable
-                    key={u.username}
-                    style={({ pressed }) => [styles.demoChip, pressed && { opacity: 0.65 }]}
-                    onPress={() => { setUsername(u.username); setPassword(u.password); }}>
-                    <Text style={styles.demoChipText}>{u.label}</Text>
-                  </Pressable>
-                ))}
+            {__DEV__ && (
+              <View style={styles.demoSection}>
+                <Text style={styles.demoLabel}>Accès démo</Text>
+                <View style={styles.demoRow}>
+                  {quickUsers.map((u) => (
+                    <Pressable
+                      key={u.username}
+                      style={({ pressed }) => [styles.demoChip, pressed && { opacity: 0.65 }]}
+                      onPress={() => { setUsername(u.username); setPassword(u.password); }}>
+                      <Text style={styles.demoChipText}>{u.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
-            </View>
+            )}
 
           </ScrollView>
         </SafeAreaView>

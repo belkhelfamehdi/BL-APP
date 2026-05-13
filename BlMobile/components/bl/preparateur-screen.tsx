@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -13,13 +14,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { api } from '@/services/api';
 import { Brand } from '@/constants/brand';
 import { PreparationItemPayload, ProductStatus, SelectionRow } from '@/types/app';
 import { ProductLine, mapProducts } from '@/utils/products';
+import { parseLocalIso, todayIso } from '@/utils/date';
+import { DatePickerModal } from '@/components/ui/date-picker-modal';
 
 interface Props {
   token: string;
@@ -40,15 +44,6 @@ const STATUS_CONFIG: Record<ProductStatus, { label: string; bg: string; text: st
   not_available: { label: 'Rupture', bg: '#FFEBEE', text: '#B71C1C', border: '#EF9A9A' },
 };
 
-function parseDateLocal(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1);
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function dedupeSelectionRows(rows: SelectionRow[]): SelectionRow[] {
   const byBl = new Map<number, SelectionRow>();
   for (const row of rows) {
@@ -62,8 +57,16 @@ function dedupeSelectionRows(rows: SelectionRow[]): SelectionRow[] {
 }
 
 export function PreparateurScreen({ token, fullName }: Props) {
+  const insets = useSafeAreaInsets();
   const [targetDate, setTargetDate] = useState(todayIso());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [isScanning, setIsScanning] = useState(true);
+  const [scanFeedback, setScanFeedback] = useState<{ kind: 'matched' | 'unknown' | 'duplicate'; text: string } | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const scanResumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (scanResumeTimer.current) clearTimeout(scanResumeTimer.current); }, []);
   const [selectionRows, setSelectionRows] = useState<SelectionRow[]>([]);
   const [activeBlId, setActiveBlId] = useState<number | null>(null);
   const [products, setProducts] = useState<ProductLine[]>([]);
@@ -76,10 +79,6 @@ export function PreparateurScreen({ token, fullName }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') setShowDatePicker(false);
-    if (selectedDate) setTargetDate(selectedDate.toISOString().slice(0, 10));
-  }, []);
 
   const activeRow = useMemo(
     () => selectionRows.find((r) => r.bl_id === activeBlId) ?? null,
@@ -95,6 +94,14 @@ export function PreparateurScreen({ token, fullName }: Props) {
       missing: rows.filter((x) => x.status === 'not_available').length,
     };
   }, [drafts]);
+
+  const invalidPartialRefs = useMemo(() => {
+    return Object.values(drafts)
+      .filter((d) => d.status === 'partial' && (d.quantityPrepared === undefined || !Number.isFinite(d.quantityPrepared) || d.quantityPrepared < 0))
+      .map((d) => d.reference);
+  }, [drafts]);
+
+  const canSend = stats.total > 0 && invalidPartialRefs.length === 0 && !sending;
 
   const loadSelection = useCallback(async () => {
     try {
@@ -114,7 +121,39 @@ export function PreparateurScreen({ token, fullName }: Props) {
     }
   }, [targetDate, token]);
 
+  const pollSelection = useCallback(async () => {
+    try {
+      const res = await api.listPreparationBls(token, targetDate);
+      setSelectionRows(dedupeSelectionRows(res.data));
+    } catch { /* silent */ }
+  }, [targetDate, token]);
+
   useEffect(() => { void loadSelection(); }, [loadSelection]);
+
+  useEffect(() => {
+    if (activeBlId !== null) return;
+    let cancelled = false;
+    const tick = () => { if (!cancelled && AppState.currentState === 'active') void pollSelection(); };
+    const interval = setInterval(tick, 30_000);
+    const sub = AppState.addEventListener('change', (state) => { if (state === 'active') tick(); });
+    return () => { cancelled = true; clearInterval(interval); sub.remove(); };
+  }, [activeBlId, pollSelection]);
+
+  useEffect(() => {
+    if (activeBlId === null) return;
+    const handle = setTimeout(() => {
+      void AsyncStorage.setItem(
+        `prep:draft:${targetDate}:${activeBlId}`,
+        JSON.stringify({ drafts, comment: globalComment }),
+      ).catch(() => {});
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [activeBlId, drafts, globalComment, targetDate]);
+
+  const draftStorageKey = useCallback(
+    (blId: number) => `prep:draft:${targetDate}:${blId}`,
+    [targetDate]
+  );
 
   const openBl = useCallback(async (blId: number) => {
     try {
@@ -133,16 +172,33 @@ export function PreparateurScreen({ token, fullName }: Props) {
           note: '',
         };
       });
+
+      let restoredComment = '';
+      let restoredDrafts = nextDraft;
+      try {
+        const stored = await AsyncStorage.getItem(draftStorageKey(blId));
+        if (stored) {
+          const parsed = JSON.parse(stored) as { drafts?: Record<string, ProductDraft>; comment?: string };
+          if (parsed?.drafts) {
+            restoredDrafts = { ...nextDraft };
+            for (const ref of Object.keys(parsed.drafts)) {
+              if (restoredDrafts[ref]) restoredDrafts[ref] = parsed.drafts[ref]!;
+            }
+          }
+          if (typeof parsed?.comment === 'string') restoredComment = parsed.comment;
+        }
+      } catch { /* corrupt entry, ignore */ }
+
       setActiveBlId(blId);
       setProducts(lines);
-      setDrafts(nextDraft);
-      setGlobalComment('');
+      setDrafts(restoredDrafts);
+      setGlobalComment(restoredComment);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoadingProducts(false);
     }
-  }, []);
+  }, [draftStorageKey]);
 
   const goBackToList = useCallback(() => {
     setActiveBlId(null);
@@ -152,6 +208,85 @@ export function PreparateurScreen({ token, fullName }: Props) {
     setError(null);
     setSuccess(null);
   }, []);
+
+  const openScanner = async () => {
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('Permission caméra', 'La caméra est nécessaire pour scanner les références.');
+        return;
+      }
+    }
+    setIsScanning(true);
+    setScanFeedback(null);
+    setShowScanner(true);
+  };
+
+  const normalizeCode = (s: string) => s.trim().toUpperCase().replace(/^0+/, '');
+
+  const findLocalMatch = (code: string): ProductLine | undefined => {
+    const n = normalizeCode(code);
+    return products.find((p) => normalizeCode(p.reference) === n);
+  };
+
+  const applyOkToDraft = (reference: string, expectedFromProduct: number | undefined) => {
+    let wasAlreadyOk = false;
+    setDrafts((prev) => {
+      const current = prev[reference];
+      if (!current) return prev;
+      if (current.status === 'available'
+          && (current.quantityPrepared ?? null) === (current.quantityExpected ?? expectedFromProduct ?? null)) {
+        wasAlreadyOk = true;
+      }
+      return {
+        ...prev,
+        [reference]: {
+          ...current,
+          status: 'available',
+          quantityPrepared: current.quantityExpected ?? expectedFromProduct ?? current.quantityPrepared,
+        },
+      };
+    });
+    return wasAlreadyOk;
+  };
+
+  const handleScanResult = async (scanData: string) => {
+    setIsScanning(false);
+    if (scanResumeTimer.current) clearTimeout(scanResumeTimer.current);
+    const code = scanData.trim();
+
+    const scheduleResume = () => {
+      scanResumeTimer.current = setTimeout(() => {
+        setScanFeedback(null);
+        setIsScanning(true);
+      }, 900);
+    };
+
+    let match = findLocalMatch(code);
+
+    if (!match) {
+      try {
+        const article = await api.getArticleByCode(code);
+        if (article?.code) {
+          match = findLocalMatch(article.code);
+        }
+      } catch { /* ignore — treat as unknown */ }
+    }
+
+    if (!match) {
+      setScanFeedback({ kind: 'unknown', text: `Réf. inconnue : ${code}` });
+      scheduleResume();
+      return;
+    }
+
+    const wasAlreadyOk = applyOkToDraft(match.reference, match.quantityExpected);
+    setScanFeedback(
+      wasAlreadyOk
+        ? { kind: 'duplicate', text: `Déjà OK : ${match.reference}` }
+        : { kind: 'matched', text: `OK : ${match.reference}` }
+    );
+    scheduleResume();
+  };
 
   const setStatus = (reference: string, status: ProductStatus) => {
     setDrafts((prev) => {
@@ -181,19 +316,10 @@ export function PreparateurScreen({ token, fullName }: Props) {
     });
   };
 
-  const sendReport = async () => {
+  const doSendReport = async () => {
     if (!activeBlId || sending) return;
     const items = Object.values(drafts);
-    if (items.length === 0) {
-      Alert.alert('Info', 'Chargez un BL avant d\'envoyer.');
-      return;
-    }
-    for (const item of items) {
-      if (item.status === 'partial' && (item.quantityPrepared === undefined || item.quantityPrepared < 0)) {
-        Alert.alert('Quantité manquante', `Saisissez la quantité préparée pour ${item.reference}`);
-        return;
-      }
-    }
+    if (items.length === 0) return;
     const payload: PreparationItemPayload[] = items.map((x) => ({
       reference: x.reference,
       status: x.status,
@@ -212,6 +338,7 @@ export function PreparateurScreen({ token, fullName }: Props) {
         overall_comment: globalComment,
         items: payload,
       });
+      void AsyncStorage.removeItem(draftStorageKey(currentBlId)).catch(() => {});
       setSuccess(`Rapport envoyé — BL #${currentBlId}`);
       setSelectionRows((prev) => prev.filter((row) => row.bl_id !== currentBlId));
       goBackToList();
@@ -220,6 +347,24 @@ export function PreparateurScreen({ token, fullName }: Props) {
     } finally {
       setSending(false);
     }
+  };
+
+  const sendReport = () => {
+    if (!activeBlId || sending) return;
+    if (stats.total === 0) return;
+    const summary = [
+      `${stats.available} OK`,
+      stats.partial > 0 ? `${stats.partial} partiel${stats.partial > 1 ? 's' : ''}` : null,
+      stats.missing > 0 ? `${stats.missing} rupture${stats.missing > 1 ? 's' : ''}` : null,
+    ].filter(Boolean).join(' • ');
+    Alert.alert(
+      `Envoyer le rapport — BL #${activeBlId}`,
+      `${summary}\n\nLe BL sera retiré de votre liste. Cette action est définitive.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Envoyer', style: 'default', onPress: () => { void doSendReport(); } },
+      ]
+    );
   };
 
   // ── BL LIST VIEW ──────────────────────────────────────────────────────────
@@ -236,7 +381,7 @@ export function PreparateurScreen({ token, fullName }: Props) {
           <Text style={styles.blCardName}>{item.destinataire || 'Client'}</Text>
           {item.date_bl ? (
             <Text style={styles.blCardMeta}>
-              BL du {parseDateLocal(item.date_bl).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+              BL du {parseLocalIso(item.date_bl).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
             </Text>
           ) : null}
         </View>
@@ -253,7 +398,7 @@ export function PreparateurScreen({ token, fullName }: Props) {
         <Text style={styles.dateSectionLabel}>Date de préparation</Text>
         <View style={styles.dateRow}>
           <Text style={styles.dateDisplay}>
-            {parseDateLocal(targetDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {parseLocalIso(targetDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
           </Text>
           <Pressable
             style={({ pressed }) => [styles.changeDateBtn, pressed && { opacity: 0.7 }]}
@@ -262,12 +407,6 @@ export function PreparateurScreen({ token, fullName }: Props) {
           </Pressable>
         </View>
       </View>
-
-      <Pressable
-        style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.8 }]}
-        onPress={loadSelection}>
-        <Text style={styles.refreshText}>Actualiser</Text>
-      </Pressable>
 
       {error ? <View style={styles.alertBox}><Text style={styles.alertText}>{error}</Text></View> : null}
       {success ? <View style={styles.successBox}><Text style={styles.successText}>{success}</Text></View> : null}
@@ -369,6 +508,11 @@ export function PreparateurScreen({ token, fullName }: Props) {
           </Text>
           <Text style={styles.activeBlId}>BL #{activeBlId}</Text>
         </View>
+        <Pressable
+          style={({ pressed }) => [styles.scanBtnHeader, pressed && { opacity: 0.85 }]}
+          onPress={openScanner}>
+          <Text style={styles.scanBtnHeaderText}>Scanner</Text>
+        </Pressable>
       </View>
 
       <View style={styles.statsBar}>
@@ -417,14 +561,23 @@ export function PreparateurScreen({ token, fullName }: Props) {
           multiline
           numberOfLines={2}
         />
+        {invalidPartialRefs.length > 0 && (
+          <View style={styles.validationHint}>
+            <Text style={styles.validationHintText}>
+              Saisissez la quantité pour {invalidPartialRefs.length > 2
+                ? `${invalidPartialRefs.slice(0, 2).join(', ')} +${invalidPartialRefs.length - 2}`
+                : invalidPartialRefs.join(', ')}
+            </Text>
+          </View>
+        )}
         <Pressable
           style={({ pressed }) => [
             styles.sendBtn,
-            (sending || stats.total === 0) && styles.sendBtnDisabled,
-            pressed && stats.total > 0 && { opacity: 0.85 },
+            !canSend && styles.sendBtnDisabled,
+            pressed && canSend && { opacity: 0.85 },
           ]}
           onPress={sendReport}
-          disabled={sending || stats.total === 0}>
+          disabled={!canSend}>
           <Text style={styles.sendBtnText}>
             {sending ? 'Envoi en cours…' : `Envoyer le rapport  (${stats.total} articles)`}
           </Text>
@@ -459,42 +612,63 @@ export function PreparateurScreen({ token, fullName }: Props) {
         renderProductList()
       )}
 
-      {Platform.OS === 'ios' ? (
-        <Modal
-          visible={showDatePicker}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowDatePicker(false)}>
-          <View style={styles.pickerOverlay}>
-            <View style={styles.pickerSheet}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Date de préparation</Text>
-                <Pressable
-                  style={({ pressed }) => [styles.pickerDoneBtn, pressed && { opacity: 0.7 }]}
-                  onPress={() => setShowDatePicker(false)}>
-                  <Text style={styles.pickerDoneText}>Confirmer</Text>
-                </Pressable>
-              </View>
-              <DateTimePicker
-                value={parseDateLocal(targetDate)}
-                mode="date"
-                display="spinner"
-                onChange={handleDateChange}
-                locale="fr-FR"
-                themeVariant="light"
-                style={styles.pickerControl}
-              />
+      <DatePickerModal
+        visible={showDatePicker}
+        title="Date de préparation"
+        value={targetDate}
+        onConfirm={(d) => { setTargetDate(d); setShowDatePicker(false); }}
+        onCancel={() => setShowDatePicker(false)}
+      />
+
+      <Modal visible={showScanner} animationType="slide" statusBarTranslucent onRequestClose={() => setShowScanner(false)}>
+        <View style={scannerStyles.modal}>
+          <View style={[scannerStyles.header, { paddingTop: insets.top + 12 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={scannerStyles.title}>Scanner les références</Text>
+              <Text style={scannerStyles.subtitle}>
+                {stats.available}/{stats.total} marqués OK
+              </Text>
             </View>
+            <Pressable style={scannerStyles.closeBtn} onPress={() => setShowScanner(false)}>
+              <Text style={scannerStyles.closeBtnText}>Terminé</Text>
+            </Pressable>
           </View>
-        </Modal>
-      ) : showDatePicker ? (
-        <DateTimePicker
-          value={parseDateLocal(targetDate)}
-          mode="date"
-          display="default"
-          onChange={handleDateChange}
-        />
-      ) : null}
+          <View style={scannerStyles.body}>
+            <CameraView
+              style={scannerStyles.camera}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39'] }}
+              onBarcodeScanned={isScanning ? (b) => { if (b.data) handleScanResult(b.data); } : undefined}
+            />
+            <View style={scannerStyles.overlay} pointerEvents="none">
+              <View style={scannerStyles.frame}>
+                <View style={[scannerStyles.corner, scannerStyles.cornerTL]} />
+                <View style={[scannerStyles.corner, scannerStyles.cornerTR]} />
+                <View style={[scannerStyles.corner, scannerStyles.cornerBL]} />
+                <View style={[scannerStyles.corner, scannerStyles.cornerBR]} />
+              </View>
+              <Text style={scannerStyles.hint}>
+                {scanFeedback ? '' : 'Pointez vers la référence article'}
+              </Text>
+            </View>
+            {scanFeedback && (
+              <View pointerEvents="none" style={scannerStyles.feedbackWrap}>
+                <View style={[
+                  scannerStyles.feedbackPill,
+                  scanFeedback.kind === 'matched' && scannerStyles.feedbackPillMatched,
+                  scanFeedback.kind === 'duplicate' && scannerStyles.feedbackPillDuplicate,
+                  scanFeedback.kind === 'unknown' && scannerStyles.feedbackPillUnknown,
+                ]}>
+                  <Text style={scannerStyles.feedbackIcon}>
+                    {scanFeedback.kind === 'matched' ? '✓' : scanFeedback.kind === 'duplicate' ? '•' : '!'}
+                  </Text>
+                  <Text style={scannerStyles.feedbackText} numberOfLines={1}>{scanFeedback.text}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -526,8 +700,6 @@ const styles = StyleSheet.create({
   changeDateBtn: { backgroundColor: '#F5F5F5', borderRadius: 10, paddingVertical: 7, paddingHorizontal: 14 },
   changeDateText: { fontSize: 13, color: Brand.ink, fontWeight: '500' },
 
-  refreshBtn: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#EBEBEB', paddingVertical: 12, alignItems: 'center', marginBottom: 12 },
-  refreshText: { fontSize: 14, fontWeight: '600', color: Brand.ink },
 
   alertBox: { backgroundColor: '#FFF0F0', borderRadius: 12, borderWidth: 1, borderColor: '#FFD0D0', padding: 12, marginBottom: 10 },
   alertBoxInline: { marginHorizontal: 16, marginBottom: 8 },
@@ -585,6 +757,8 @@ const styles = StyleSheet.create({
   },
   backBtn: { paddingVertical: 6, paddingHorizontal: 4 },
   backBtnText: { fontSize: 17, color: Brand.ember, fontWeight: '600' },
+  scanBtnHeader: { backgroundColor: Brand.ember, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  scanBtnHeaderText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
   productViewTitle: { flex: 1 },
   activeClientName: { fontSize: 16, fontWeight: '700', color: Brand.ink },
   activeBlId: { fontSize: 12, color: Brand.muted, marginTop: 2 },
@@ -686,12 +860,58 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { opacity: 0.35 },
   sendBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
+  validationHint: {
+    backgroundColor: '#FFF8E1',
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+  },
+  validationHintText: { fontSize: 12, color: '#9A4F00', fontWeight: '600' },
+});
 
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  pickerSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32 },
-  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#EFEFEF' },
-  pickerTitle: { fontSize: 15, fontWeight: '600', color: Brand.ink },
-  pickerDoneBtn: { backgroundColor: Brand.ember, borderRadius: 10, paddingHorizontal: 18, paddingVertical: 8 },
-  pickerDoneText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  pickerControl: { width: '100%' },
+const scannerStyles = StyleSheet.create({
+  modal: { flex: 1, backgroundColor: '#0A0A0A' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    backgroundColor: Brand.ink,
+  },
+  title: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
+  subtitle: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginTop: 2 },
+  closeBtn: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14, marginLeft: 12 },
+  closeBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
+  body: { flex: 1, position: 'relative' },
+  camera: { flex: 1 },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', gap: 24 },
+  frame: { width: 280, height: 180, position: 'relative' },
+  corner: { position: 'absolute', width: 24, height: 24, borderColor: Brand.ember, borderRadius: 4 },
+  cornerTL: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4 },
+  cornerTR: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4 },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4 },
+  cornerBR: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4 },
+  hint: { color: 'rgba(255,255,255,0.8)', fontSize: 15, textAlign: 'center', fontWeight: '500' },
+  feedbackWrap: { position: 'absolute', left: 0, right: 0, bottom: 60, alignItems: 'center' },
+  feedbackPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 999,
+    maxWidth: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  feedbackPillMatched: { backgroundColor: '#1FA871' },
+  feedbackPillDuplicate: { backgroundColor: '#3C3C3C' },
+  feedbackPillUnknown: { backgroundColor: Brand.danger },
+  feedbackIcon: { fontSize: 16, fontWeight: '800', color: '#FFFFFF' },
+  feedbackText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', flexShrink: 1 },
 });
