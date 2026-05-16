@@ -64,7 +64,7 @@ const LabelView: React.FC<LabelViewProps> = ({ article }) => {
           </View>
 
           <View style={labelStyles.logoArea}>
-            <LogoMark size={120} />
+            <LogoMark size={84} />
           </View>
         </View>
       </View>
@@ -75,38 +75,38 @@ const LabelView: React.FC<LabelViewProps> = ({ article }) => {
 const labelStyles = StyleSheet.create({
   container: {
     width: 400,
-    height: 200,
+    height: 160,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D8D8D8',
+    borderWidth: 2,
+    borderColor: Brand.ink,
     borderRadius: 10,
     flexDirection: 'row',
     overflow: 'hidden',
   },
   leftBar: {
-    width: 8,
+    width: 10,
     backgroundColor: Brand.ember,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 11,
     justifyContent: 'space-between',
   },
   header: {
-    marginBottom: 10,
+    marginBottom: 6,
   },
   designation: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '900',
     color: Brand.ink,
-    lineHeight: 20,
+    lineHeight: 21,
   },
   divider: {
-    height: 1,
-    backgroundColor: '#EFEFEF',
-    marginBottom: 10,
+    height: 1.5,
+    backgroundColor: Brand.ink,
+    marginBottom: 8,
   },
   priceRow: {
     flexDirection: 'row',
@@ -115,28 +115,28 @@ const labelStyles = StyleSheet.create({
     flex: 1,
   },
   priceBlock: {
-    gap: 2,
+    gap: 1,
   },
   htLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#999999',
+    fontSize: 12,
+    fontWeight: '900',
+    color: Brand.ink,
     textTransform: 'uppercase',
-    letterSpacing: 1.6,
+    letterSpacing: 1.4,
   },
   htValueRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
   },
   htValue: {
-    fontSize: 42,
-    fontWeight: '800',
+    fontSize: 44,
+    fontWeight: '900',
     color: Brand.ember,
-    lineHeight: 46,
+    lineHeight: 48,
   },
   htUnit: {
-    fontSize: 21,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '900',
     color: Brand.ember,
     marginBottom: 5,
   },
@@ -146,21 +146,21 @@ const labelStyles = StyleSheet.create({
     marginTop: 2,
   },
   ttcLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#BBBBBB',
+    fontSize: 12,
+    fontWeight: '900',
+    color: Brand.ink,
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
   },
   ttcValue: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#666666',
+    fontSize: 20,
+    fontWeight: '900',
+    color: Brand.ink,
   },
   logoArea: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: 12,
+    paddingLeft: 10,
   },
 });
 
@@ -307,7 +307,7 @@ export default function TicketsScreen() {
   }, [articles.length]);
 
   const generatePdfFromImages = async (imageUris: string[]): Promise<string> => {
-    const LABELS_PER_PAGE = 4;
+    const LABELS_PER_PAGE = 5;
     const pages: string[][] = [];
     for (let i = 0; i < imageUris.length; i += LABELS_PER_PAGE) {
       pages.push(imageUris.slice(i, i + LABELS_PER_PAGE));
@@ -315,9 +315,9 @@ export default function TicketsScreen() {
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
       *{margin:0;padding:0;box-sizing:border-box;}
       body{font-family:Arial,sans-serif;background:#fff;}
-      .page{page-break-after:always;display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-start;gap:20px;padding:30px;}
+      .page{page-break-after:always;display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px 30px;}
       .page:last-child{page-break-after:avoid;}
-      img{width:400px;height:200px;object-fit:contain;}
+      img{width:400px;height:160px;object-fit:contain;display:block;}
     </style></head><body>
     ${pages.map((p) => `<div class="page">${p.map((u) => `<img src="${u}"/>`).join('')}</div>`).join('')}
     </body></html>`;
@@ -794,7 +794,7 @@ const styles = StyleSheet.create({
     elevation: 16,
   },
   modalHandle: { width: 40, height: 4, backgroundColor: '#E0E0E0', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  previewContainer: { alignItems: 'center', marginBottom: 24, height: 166, overflow: 'hidden' },
+  previewContainer: { alignItems: 'center', marginBottom: 24, height: 132, overflow: 'hidden' },
   previewScaled: { transform: [{ scale: 0.78 }] },
   modalActions: { gap: 10, marginBottom: 10 },
   printBtn: { backgroundColor: Brand.ember, borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
   closeBtn: { backgroundColor: '#F5F5F5', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   closeBtnText: { fontSize: 14, color: Brand.muted, fontWeight: '500' },
 
-  hiddenCapture: { position: 'absolute', left: -9999, top: 0, width: 400, height: 200, opacity: 0 },
+  hiddenCapture: { position: 'absolute', left: -9999, top: 0, width: 400, height: 160, opacity: 0 },
   scanBtn: { backgroundColor: Brand.ember, borderRadius: 12, paddingHorizontal: 14, justifyContent: 'center' },
   scanBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
 });
